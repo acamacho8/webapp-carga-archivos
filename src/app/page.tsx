@@ -47,9 +47,16 @@ export default function Home() {
       const mesNum = String(MESES_INDEX.indexOf(folder.mes) + 1).padStart(2, "0");
       const diaNum = String(folder.dia).padStart(2, "0");
       const year = new Date().getFullYear();
-      // Folder uses "01 - Enero" format matching Drive structure
+      // Map store codes to actual Drive folder names
+      const TIENDA_FOLDER: Record<string, string> = {
+        FQ01: "Chacao FQ01",
+        FQ28: "Marqués FQ28",
+        FQ88: "Candelaria FQ88",
+      };
+      const tiendaFolder = TIENDA_FOLDER[folder.tienda] ?? folder.tienda;
+      // Month: "01 - Enero" | Day: "01" (zero-padded) — matching Drive structure
       const mesFolderName = `${mesNum} - ${folder.mes}`;
-      const folderPath = `${folder.tienda}/${mesFolderName}/${diaNum}`;
+      const folderPath = `${tiendaFolder}/${mesFolderName}/${diaNum}`;
       // Always include date suffix so GAS can parse it
       const dateTag = `${year}_${mesNum}_${diaNum}`;
       const baseName = customName.trim()
