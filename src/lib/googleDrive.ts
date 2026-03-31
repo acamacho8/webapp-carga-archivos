@@ -2,7 +2,8 @@ const GAS_URL = process.env.GOOGLE_APPS_SCRIPT_URL;
 
 export async function uploadPdfToDrive(
   pdfBuffer: Buffer,
-  filename: string
+  filename: string,
+  folderPath?: string
 ): Promise<{ viewLink: string }> {
   if (!GAS_URL) throw new Error("GOOGLE_APPS_SCRIPT_URL must be set");
 
@@ -11,7 +12,7 @@ export async function uploadPdfToDrive(
   const res = await fetch(GAS_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ fileData, fileName: filename, mimeType: "application/pdf" }),
+    body: JSON.stringify({ fileData, fileName: filename, mimeType: "application/pdf", folderPath }),
     redirect: "follow",
   });
 

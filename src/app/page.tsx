@@ -2,16 +2,36 @@
 
 import { useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
+import FolderSelector, { type FolderSelection } from "@/components/FolderSelector";
 import { usePdfGenerator } from "@/hooks/usePdfGenerator";
 
-type Step = "capture" | "preview" | "uploading" | "done" | "error";
+type Step = "folder" | "capture" | "preview" | "uploading" | "done" | "error";
+
+const MESES_INDEX = [
+  "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre",
+];
+
+function todayFolder(): FolderSelection {
+  const now = new Date();
+  return {
+    tienda: "FQ01",
+    mes: MESES_INDEX[now.getMonth()],
+    dia: now.getDate(),
+  };
+}
+
+const STEP_LABELS = ["Carpeta", "Foto", "Revisar", "Drive"];
 
 export default function Home() {
-  const [step, setStep] = useState<Step>("capture");
+  const [step, setStep] = useState<Step>("folder");
+  const [folder, setFolder] = useState<FolderSelection>(todayFolder());
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [driveLink, setDriveLink] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { generatePdf, downloadPdf } = usePdfGenerator();
+
+  const stepIndex = { folder: 0, capture: 1, preview: 2, uploading: 3, done: 3, error: 3 }[step];
 
   function handleCapture(dataUrl: string) {
     setImageDataUrl(dataUrl);
@@ -23,14 +43,15 @@ export default function Home() {
     setStep("uploading");
     try {
       const blob = await generatePdf(imageDataUrl);
-      const filename = `reporte_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.pdf`;
+      const folderPath = `${folder.tienda}/${folder.mes}/${String(folder.dia).padStart(2, "0")}`;
+      const filename = `reporte_${folder.tienda}_${folder.mes}_${String(folder.dia).padStart(2, "0")}_${Date.now()}.pdf`;
       const formData = new FormData();
       formData.append("file", blob, filename);
       formData.append("filename", filename);
+      formData.append("folderPath", folderPath);
 
       const res = await fetch("/api/upload-drive", { method: "POST", body: formData });
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error ?? "Error al subir");
       setDriveLink(data.viewLink);
       setStep("done");
@@ -41,14 +62,15 @@ export default function Home() {
   }
 
   function handleDownload() {
-    if (imageDataUrl) downloadPdf(imageDataUrl, "reporte");
+    if (imageDataUrl) downloadPdf(imageDataUrl, `reporte_${folder.tienda}`);
   }
 
   function reset() {
-    setStep("capture");
+    setStep("folder");
     setImageDataUrl(null);
     setDriveLink(null);
     setErrorMsg(null);
+    setFolder(todayFolder());
   }
 
   return (
@@ -60,56 +82,63 @@ export default function Home() {
         </div>
 
         {/* Steps indicator */}
-        <div className="flex items-center justify-center gap-2 text-xs font-medium">
-          {(["capture", "preview", "uploading", "done"] as Step[]).map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
-              <span
-                className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                  step === s
-                    ? "bg-blue-600 text-white"
-                    : ["done", "uploading"].includes(step) && i < ["capture","preview","uploading","done"].indexOf(step)
-                    ? "bg-green-500 text-white"
-                    : "bg-gray-100 text-gray-400"
-                }`}
-              >
-                {i + 1}
-              </span>
-              {i < 3 && <div className="w-6 h-px bg-gray-200" />}
+        <div className="flex items-center justify-center gap-1">
+          {STEP_LABELS.map((label, i) => (
+            <div key={label} className="flex items-center gap-1">
+              <div className="flex flex-col items-center gap-1">
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                  i === stepIndex ? "bg-blue-600 text-white"
+                  : i < stepIndex ? "bg-green-500 text-white"
+                  : "bg-gray-100 text-gray-400"
+                }`}>
+                  {i < stepIndex ? "✓" : i + 1}
+                </span>
+                <span className={`text-[10px] ${i === stepIndex ? "text-blue-600 font-semibold" : "text-gray-400"}`}>
+                  {label}
+                </span>
+              </div>
+              {i < STEP_LABELS.length - 1 && <div className="w-8 h-px bg-gray-200 mb-4" />}
             </div>
           ))}
         </div>
 
+        {/* Step: folder */}
+        {step === "folder" && (
+          <FolderSelector
+            value={folder}
+            onChange={setFolder}
+            onConfirm={() => setStep("capture")}
+          />
+        )}
+
         {/* Step: capture */}
         {step === "capture" && (
-          <CameraCapture onCapture={handleCapture} />
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-500 font-mono bg-gray-50 px-3 py-1.5 rounded-lg">
+                📁 {folder.tienda} / {folder.mes} / {String(folder.dia).padStart(2, "0")}
+              </p>
+              <button onClick={() => setStep("folder")} className="text-xs text-blue-500 hover:underline">
+                Cambiar
+              </button>
+            </div>
+            <CameraCapture onCapture={handleCapture} />
+          </div>
         )}
 
         {/* Step: preview */}
         {step === "preview" && imageDataUrl && (
           <div className="flex flex-col gap-4 items-center">
-            <img
-              src={imageDataUrl}
-              alt="Foto capturada"
-              className="rounded-xl w-full border border-gray-200 shadow-sm"
-            />
-            <div className="flex gap-3 w-full">
-              <button
-                onClick={reset}
-                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
+            <img src={imageDataUrl} alt="Foto capturada" className="rounded-xl w-full border border-gray-200 shadow-sm" />
+            <div className="flex gap-2 w-full">
+              <button onClick={() => setStep("capture")} className="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                 Repetir
               </button>
-              <button
-                onClick={handleDownload}
-                className="flex-1 px-4 py-2.5 border border-blue-300 rounded-xl text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
-              >
-                Descargar PDF
+              <button onClick={handleDownload} className="flex-1 px-3 py-2.5 border border-blue-300 rounded-xl text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors">
+                Descargar
               </button>
-              <button
-                onClick={handleUpload}
-                className="flex-1 px-4 py-2.5 bg-blue-600 rounded-xl text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-              >
-                Subir a Drive
+              <button onClick={handleUpload} className="flex-1 px-3 py-2.5 bg-blue-600 rounded-xl text-sm font-medium text-white hover:bg-blue-700 transition-colors">
+                Subir
               </button>
             </div>
           </div>
@@ -119,7 +148,7 @@ export default function Home() {
         {step === "uploading" && (
           <div className="flex flex-col items-center gap-4 py-8">
             <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-600 text-sm">Generando PDF y subiendo a Drive...</p>
+            <p className="text-gray-600 text-sm">Subiendo a {folder.tienda} / {folder.mes} / {folder.dia}...</p>
           </div>
         )}
 
@@ -133,20 +162,13 @@ export default function Home() {
             </div>
             <div>
               <p className="font-semibold text-gray-900">¡Subido exitosamente!</p>
-              <p className="text-gray-500 text-sm mt-1">El PDF está disponible en Google Drive</p>
+              <p className="text-gray-500 text-xs mt-1 font-mono">📁 {folder.tienda} / {folder.mes} / {folder.dia}</p>
             </div>
-            <a
-              href={driveLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full px-4 py-2.5 bg-blue-600 rounded-xl text-sm font-medium text-white hover:bg-blue-700 transition-colors text-center"
-            >
+            <a href={driveLink} target="_blank" rel="noopener noreferrer"
+              className="w-full px-4 py-2.5 bg-blue-600 rounded-xl text-sm font-medium text-white hover:bg-blue-700 transition-colors text-center">
               Ver en Google Drive
             </a>
-            <button
-              onClick={reset}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
+            <button onClick={reset} className="w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
               Capturar otro reporte
             </button>
           </div>
@@ -164,10 +186,7 @@ export default function Home() {
               <p className="font-semibold text-gray-900">Error al subir</p>
               <p className="text-red-500 text-sm mt-1">{errorMsg}</p>
             </div>
-            <button
-              onClick={() => setStep("preview")}
-              className="w-full px-4 py-2.5 bg-blue-600 rounded-xl text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-            >
+            <button onClick={() => setStep("preview")} className="w-full px-4 py-2.5 bg-blue-600 rounded-xl text-sm font-medium text-white hover:bg-blue-700 transition-colors">
               Reintentar
             </button>
           </div>

@@ -6,6 +6,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const filename = (formData.get("filename") as string) || "reporte.pdf";
+    const folderPath = (formData.get("folderPath") as string) || undefined;
 
     if (!file) {
       return NextResponse.json({ error: "No se recibió archivo" }, { status: 400 });
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const { viewLink } = await uploadPdfToDrive(buffer, filename);
+    const { viewLink } = await uploadPdfToDrive(buffer, filename, folderPath);
 
     return NextResponse.json({ viewLink });
   } catch (err) {
