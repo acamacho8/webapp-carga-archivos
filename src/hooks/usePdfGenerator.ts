@@ -3,15 +3,15 @@ import { useCallback } from "react";
 export function usePdfGenerator() {
   const generatePdf = useCallback(
     async (imageDataUrl: string, filename = "reporte"): Promise<Blob> => {
-      const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const jsPDFModule = await import("jspdf");
+      const JsPDF = jsPDFModule.default ?? (jsPDFModule as any).jsPDF;
+      const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 10;
       const imgWidth = pageWidth - margin * 2;
 
-      // Calculate proportional height from dataUrl
       const img = new Image();
       img.src = imageDataUrl;
       await new Promise<void>((resolve) => {
@@ -30,8 +30,9 @@ export function usePdfGenerator() {
 
   const downloadPdf = useCallback(
     async (imageDataUrl: string, filename = "reporte") => {
-      const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const jsPDFModule = await import("jspdf");
+      const JsPDF = jsPDFModule.default ?? (jsPDFModule as any).jsPDF;
+      const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();

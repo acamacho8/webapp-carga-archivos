@@ -14,9 +14,9 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const { fileId, viewLink } = await uploadPdfToDrive(buffer, filename);
+    const { viewLink } = await uploadPdfToDrive(buffer, filename);
 
-    return NextResponse.json({ fileId, viewLink });
+    return NextResponse.json({ viewLink });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error desconocido";
     return NextResponse.json({ error: message }, { status: 500 });
