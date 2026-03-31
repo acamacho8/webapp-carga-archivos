@@ -44,13 +44,17 @@ export default function Home() {
     setStep("uploading");
     try {
       const blob = await generatePdf(imageDataUrl);
-      const folderPath = `${folder.tienda}/${folder.mes}/${String(folder.dia).padStart(2, "0")}`;
       const mesNum = String(MESES_INDEX.indexOf(folder.mes) + 1).padStart(2, "0");
       const diaNum = String(folder.dia).padStart(2, "0");
       const year = new Date().getFullYear();
+      // Folder uses "01 - Enero" format matching Drive structure
+      const mesFolderName = `${mesNum} - ${folder.mes}`;
+      const folderPath = `${folder.tienda}/${mesFolderName}/${diaNum}`;
+      // Always include date suffix so GAS can parse it
+      const dateTag = `${year}_${mesNum}_${diaNum}`;
       const baseName = customName.trim()
-        ? customName.trim().replace(/\.pdf$/i, "")
-        : `reporte_${folder.tienda}_${year}_${mesNum}_${diaNum}`;
+        ? `${customName.trim().replace(/\.pdf$/i, "")}_${dateTag}`
+        : `reporte_${folder.tienda}_${dateTag}`;
       const filename = `${baseName}.pdf`;
       const formData = new FormData();
       formData.append("file", blob, filename);
@@ -147,7 +151,7 @@ export default function Home() {
                 placeholder={`reporte_${folder.tienda}_${new Date().getFullYear()}_...`}
                 className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-400"
               />
-              <p className="text-[11px] text-gray-400">Se guardará como <span className="font-mono">{(customName.trim() || `reporte_${folder.tienda}`).replace(/\.pdf$/i, "")}.pdf</span></p>
+              <p className="text-[11px] text-gray-400">Se guardará como <span className="font-mono">{(customName.trim() ? customName.trim().replace(/\.pdf$/i, "") : `reporte_${folder.tienda}`)}_{ `${new Date().getFullYear()}_${String(MESES_INDEX.indexOf(folder.mes)+1).padStart(2,"0")}_${String(folder.dia).padStart(2,"0")}`}.pdf</span></p>
             </div>
             <div className="flex gap-2 w-full">
               <button onClick={() => setStep("capture")} className="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
