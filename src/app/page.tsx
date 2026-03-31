@@ -27,6 +27,7 @@ export default function Home() {
   const [step, setStep] = useState<Step>("folder");
   const [folder, setFolder] = useState<FolderSelection>(todayFolder());
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [customName, setCustomName] = useState("");
   const [driveLink, setDriveLink] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { generatePdf, downloadPdf } = usePdfGenerator();
@@ -47,7 +48,10 @@ export default function Home() {
       const mesNum = String(MESES_INDEX.indexOf(folder.mes) + 1).padStart(2, "0");
       const diaNum = String(folder.dia).padStart(2, "0");
       const year = new Date().getFullYear();
-      const filename = `reporte_${folder.tienda}_${year}_${mesNum}_${diaNum}.pdf`;
+      const baseName = customName.trim()
+        ? customName.trim().replace(/\.pdf$/i, "")
+        : `reporte_${folder.tienda}_${year}_${mesNum}_${diaNum}`;
+      const filename = `${baseName}.pdf`;
       const formData = new FormData();
       formData.append("file", blob, filename);
       formData.append("filename", filename);
@@ -73,6 +77,7 @@ export default function Home() {
     setImageDataUrl(null);
     setDriveLink(null);
     setErrorMsg(null);
+    setCustomName("");
     setFolder(todayFolder());
   }
 
@@ -133,6 +138,17 @@ export default function Home() {
         {step === "preview" && imageDataUrl && (
           <div className="flex flex-col gap-4 items-center">
             <img src={imageDataUrl} alt="Foto capturada" className="rounded-xl w-full border border-gray-200 shadow-sm" />
+            <div className="w-full flex flex-col gap-1">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Nombre del archivo</label>
+              <input
+                type="text"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder={`reporte_${folder.tienda}_${new Date().getFullYear()}_...`}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-400"
+              />
+              <p className="text-[11px] text-gray-400">Se guardará como <span className="font-mono">{(customName.trim() || `reporte_${folder.tienda}`).replace(/\.pdf$/i, "")}.pdf</span></p>
+            </div>
             <div className="flex gap-2 w-full">
               <button onClick={() => setStep("capture")} className="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                 Repetir
