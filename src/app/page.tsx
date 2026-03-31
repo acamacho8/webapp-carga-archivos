@@ -44,7 +44,10 @@ export default function Home() {
     try {
       const blob = await generatePdf(imageDataUrl);
       const folderPath = `${folder.tienda}/${folder.mes}/${String(folder.dia).padStart(2, "0")}`;
-      const filename = `reporte_${folder.tienda}_${folder.mes}_${String(folder.dia).padStart(2, "0")}_${Date.now()}.pdf`;
+      const mesNum = String(MESES_INDEX.indexOf(folder.mes) + 1).padStart(2, "0");
+      const diaNum = String(folder.dia).padStart(2, "0");
+      const year = new Date().getFullYear();
+      const filename = `reporte_${folder.tienda}_${year}_${mesNum}_${diaNum}.pdf`;
       const formData = new FormData();
       formData.append("file", blob, filename);
       formData.append("filename", filename);
