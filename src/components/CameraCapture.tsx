@@ -21,14 +21,18 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
         video: { facingMode: "environment" },
       });
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
       setActive(true);
     } catch {
       setError("No se pudo acceder a la cámara. Verifica los permisos.");
     }
   }, []);
+
+  // Assign stream after video element is mounted (active=true triggers render)
+  useEffect(() => {
+    if (active && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [active]);
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
