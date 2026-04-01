@@ -143,6 +143,17 @@ export default function Home() {
               </button>
             </div>
 
+            {/* Guía de captura */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-col gap-2">
+              <p className="text-xs font-semibold text-amber-800">📋 Para mejor lectura del ticket:</p>
+              <div className="grid grid-cols-2 gap-1.5 text-xs text-amber-700">
+                <span>📱 Teléfono recto, desde arriba</span>
+                <span>💡 Sin sombras ni reflejos</span>
+                <span>📄 Ticket plano y completo</span>
+                <span>🔍 Llena el encuadre</span>
+              </div>
+            </div>
+
             <CameraCapture onCapture={handleCapture} />
 
             {/* Miniaturas de fotos tomadas */}
