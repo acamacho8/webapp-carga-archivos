@@ -4,6 +4,7 @@ import { useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
 import FolderSelector, { type FolderSelection } from "@/components/FolderSelector";
 import { usePdfGenerator } from "@/hooks/usePdfGenerator";
+import { useOcr } from "@/hooks/useOcr";
 
 type Step = "folder" | "capture" | "preview" | "uploading" | "done" | "error";
 
@@ -30,47 +31,62 @@ export default function Home() {
   const [customName, setCustomName] = useState("");
   const [driveLink, setDriveLink] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const { generatePdf, downloadPdf } = usePdfGenerator();
+  const { generatePdf, downloadPdf, generateTextPdf } = usePdfGenerator();
+  const { ocrText, ocrLoading, runOcr, resetOcr } = useOcr();
+  const [editedText, setEditedText] = useState<string>("");
 
   const stepIndex = { folder: 0, capture: 1, preview: 2, uploading: 3, done: 3, error: 3 }[step];
 
   function handleCapture(dataUrl: string) {
     setImageDataUrl(dataUrl);
+    setEditedText("");
     setStep("preview");
+    runOcr(dataUrl);
   }
 
   async function handleUpload() {
     if (!imageDataUrl) return;
     setStep("uploading");
     try {
-      const blob = await generatePdf(imageDataUrl);
       const mesNum = String(MESES_INDEX.indexOf(folder.mes) + 1).padStart(2, "0");
       const diaNum = String(folder.dia).padStart(2, "0");
       const year = new Date().getFullYear();
-      // Map store codes to actual Drive folder names
       const TIENDA_FOLDER: Record<string, string> = {
         FQ01: "Chacao FQ01",
         FQ28: "Marqués FQ28",
         FQ88: "Candelaria FQ88",
       };
       const tiendaFolder = TIENDA_FOLDER[folder.tienda] ?? folder.tienda;
-      // Month: "01 - Enero" | Day: "01" (zero-padded) — matching Drive structure
       const mesFolderName = `${mesNum} - ${folder.mes}`;
       const folderPath = `${tiendaFolder}/${mesFolderName}/${diaNum}`;
-      // Always include date suffix so GAS can parse it
       const dateTag = `${year}_${mesNum}_${diaNum}`;
       const baseName = customName.trim()
         ? `${customName.trim().replace(/\.pdf$/i, "")}_${dateTag}`
         : `reporte_${folder.tienda}_${dateTag}`;
+
+      // Subir PDF imagen
+      const blob = await generatePdf(imageDataUrl);
       const filename = `${baseName}.pdf`;
       const formData = new FormData();
       formData.append("file", blob, filename);
       formData.append("filename", filename);
       formData.append("folderPath", folderPath);
-
       const res = await fetch("/api/upload-drive", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al subir");
+
+      // Subir PDF de texto limpio si hay texto
+      const textContent = editedText.trim() || ocrText?.trim();
+      if (textContent) {
+        const textBlob = await generateTextPdf(textContent);
+        const textFilename = `${baseName}_texto.pdf`;
+        const textForm = new FormData();
+        textForm.append("file", textBlob, textFilename);
+        textForm.append("filename", textFilename);
+        textForm.append("folderPath", folderPath);
+        await fetch("/api/upload-drive", { method: "POST", body: textForm });
+      }
+
       setDriveLink(data.viewLink);
       setStep("done");
     } catch (err) {
@@ -90,6 +106,8 @@ export default function Home() {
     setErrorMsg(null);
     setCustomName("");
     setFolder(todayFolder());
+    resetOcr();
+    setEditedText("");
   }
 
   return (
@@ -149,7 +167,29 @@ export default function Home() {
         {step === "preview" && imageDataUrl && (
           <div className="flex flex-col gap-4 items-center">
             <img src={imageDataUrl} alt="Foto capturada" className="rounded-xl w-full border border-gray-200 shadow-sm" />
-            <div className="w-full flex flex-col gap-1">
+            {/* OCR text block */}
+          <div className="w-full flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Texto extraído</label>
+              {ocrLoading && <span className="text-xs text-blue-500 animate-pulse">Analizando...</span>}
+            </div>
+            {ocrLoading ? (
+              <div className="w-full h-28 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <textarea
+                value={editedText || ocrText || ""}
+                onChange={(e) => setEditedText(e.target.value)}
+                placeholder="El texto del documento aparecerá aquí..."
+                rows={6}
+                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-400 resize-none font-mono"
+              />
+            )}
+            <p className="text-[11px] text-gray-400">Puedes editar el texto antes de subir</p>
+          </div>
+
+          <div className="w-full flex flex-col gap-1">
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Nombre del archivo</label>
               <input
                 type="text"

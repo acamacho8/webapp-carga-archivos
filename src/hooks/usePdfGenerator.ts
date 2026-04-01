@@ -56,5 +56,33 @@ export function usePdfGenerator() {
     []
   );
 
-  return { generatePdf, downloadPdf };
+  const generateTextPdf = useCallback(async (text: string): Promise<Blob> => {
+    const jsPDFModule = await import("jspdf");
+    const JsPDF = jsPDFModule.default ?? (jsPDFModule as any).jsPDF;
+    const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    const margin = 15;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const maxWidth = pageWidth - margin * 2;
+    const lineHeight = 6;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+
+    const lines = doc.splitTextToSize(text, maxWidth);
+    let y = margin;
+    for (const line of lines) {
+      if (y + lineHeight > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.text(line, margin, y);
+      y += lineHeight;
+    }
+
+    return doc.output("blob");
+  }, []);
+
+  return { generatePdf, downloadPdf, generateTextPdf };
 }
