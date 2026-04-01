@@ -21,7 +21,8 @@ export function usePdfGenerator() {
       const ratio = img.naturalHeight / img.naturalWidth;
       const imgHeight = Math.min(imgWidth * ratio, pageHeight - margin * 2);
 
-      doc.addImage(imageDataUrl, "PNG", margin, margin, imgWidth, imgHeight);
+      const format = imageDataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+      doc.addImage(imageDataUrl, format, margin, margin, imgWidth, imgHeight);
 
       return doc.output("blob");
     },
@@ -48,7 +49,8 @@ export function usePdfGenerator() {
       const ratio = img.naturalHeight / img.naturalWidth;
       const imgHeight = Math.min(imgWidth * ratio, pageHeight - margin * 2);
 
-      doc.addImage(imageDataUrl, "PNG", margin, margin, imgWidth, imgHeight);
+      const format = imageDataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+      doc.addImage(imageDataUrl, format, margin, margin, imgWidth, imgHeight);
       doc.save(`${filename}.pdf`);
     },
     []

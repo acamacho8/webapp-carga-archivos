@@ -9,6 +9,7 @@ interface CameraCaptureProps {
 export default function CameraCapture({ onCapture }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const guideRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,11 +44,25 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
   const capture = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
-    const dataUrl = canvas.toDataURL("image/png");
+    const guide = guideRef.current;
+    if (!video || !canvas || !guide) return;
+
+    const videoRect = video.getBoundingClientRect();
+    const guideRect = guide.getBoundingClientRect();
+
+    const scaleX = video.videoWidth / videoRect.width;
+    const scaleY = video.videoHeight / videoRect.height;
+
+    const srcX = Math.round((guideRect.left - videoRect.left) * scaleX);
+    const srcY = Math.round((guideRect.top - videoRect.top) * scaleY);
+    const srcW = Math.round(guideRect.width * scaleX);
+    const srcH = Math.round(guideRect.height * scaleY);
+
+    canvas.width = srcW;
+    canvas.height = srcH;
+    canvas.getContext("2d")?.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
     setPreview(dataUrl);
     onCapture(dataUrl);
     stopCamera();
@@ -79,12 +94,33 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
 
       {active && (
         <div className="flex flex-col items-center gap-3 w-full">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            className="rounded-xl w-full max-w-sm border border-gray-200 shadow"
-          />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-xl border border-gray-200 shadow">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              className="w-full block"
+            />
+            <p
+              className="absolute text-white text-xs font-medium pointer-events-none"
+              style={{ top: "calc(5% - 18px)", left: "6%", textShadow: "0 1px 3px rgba(0,0,0,0.6)" }}
+            >
+              Alinea el documento aquí
+            </p>
+            <div
+              ref={guideRef}
+              className="absolute pointer-events-none"
+              style={{
+                top: "5%",
+                left: "6%",
+                width: "88%",
+                aspectRatio: "210 / 297",
+                boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)",
+                border: "2px solid rgba(255,255,255,0.85)",
+                borderRadius: "4px",
+              }}
+            />
+          </div>
           <button
             onClick={capture}
             className="px-6 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors"
