@@ -4,7 +4,6 @@ import { useState } from "react";
 import CameraCapture from "@/components/CameraCapture";
 import FolderSelector, { type FolderSelection } from "@/components/FolderSelector";
 import { usePdfGenerator } from "@/hooks/usePdfGenerator";
-import { useOcr } from "@/hooks/useOcr";
 
 type Step = "folder" | "capture" | "preview" | "uploading" | "done" | "error";
 
@@ -27,27 +26,27 @@ const STEP_LABELS = ["Carpeta", "Foto", "Revisar", "Drive"];
 export default function Home() {
   const [step, setStep] = useState<Step>("folder");
   const [folder, setFolder] = useState<FolderSelection>(todayFolder());
-  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [images, setImages] = useState<string[]>([]);
   const [customName, setCustomName] = useState("");
   const [driveLink, setDriveLink] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const { generatePdf, downloadPdf, generateTextPdf } = usePdfGenerator();
-  const { ocrText, ocrLoading, runOcr, resetOcr } = useOcr();
-  const [editedText, setEditedText] = useState<string>("");
+  const { generatePdf, downloadPdf } = usePdfGenerator();
 
   const stepIndex = { folder: 0, capture: 1, preview: 2, uploading: 3, done: 3, error: 3 }[step];
 
   function handleCapture(dataUrl: string) {
-    setImageDataUrl(dataUrl);
-    setEditedText("");
-    setStep("preview");
-    runOcr(dataUrl);
+    setImages((prev) => [...prev, dataUrl]);
+  }
+
+  function removeImage(index: number) {
+    setImages((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleUpload() {
-    if (!imageDataUrl) return;
+    if (images.length === 0) return;
     setStep("uploading");
     try {
+      const blob = await generatePdf(images);
       const mesNum = String(MESES_INDEX.indexOf(folder.mes) + 1).padStart(2, "0");
       const diaNum = String(folder.dia).padStart(2, "0");
       const year = new Date().getFullYear();
@@ -63,30 +62,16 @@ export default function Home() {
       const baseName = customName.trim()
         ? `${customName.trim().replace(/\.pdf$/i, "")}_${dateTag}`
         : `reporte_${folder.tienda}_${dateTag}`;
-
-      // Subir PDF imagen
-      const blob = await generatePdf(imageDataUrl);
       const filename = `${baseName}.pdf`;
+
       const formData = new FormData();
       formData.append("file", blob, filename);
       formData.append("filename", filename);
       formData.append("folderPath", folderPath);
+
       const res = await fetch("/api/upload-drive", { method: "POST", body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al subir");
-
-      // Subir PDF de texto limpio si hay texto
-      const textContent = editedText.trim() || ocrText?.trim();
-      if (textContent) {
-        const textBlob = await generateTextPdf(textContent);
-        const textFilename = `${baseName}_texto.pdf`;
-        const textForm = new FormData();
-        textForm.append("file", textBlob, textFilename);
-        textForm.append("filename", textFilename);
-        textForm.append("folderPath", folderPath);
-        await fetch("/api/upload-drive", { method: "POST", body: textForm });
-      }
-
       setDriveLink(data.viewLink);
       setStep("done");
     } catch (err) {
@@ -96,18 +81,16 @@ export default function Home() {
   }
 
   function handleDownload() {
-    if (imageDataUrl) downloadPdf(imageDataUrl, `reporte_${folder.tienda}`);
+    if (images.length > 0) downloadPdf(images, `reporte_${folder.tienda}`);
   }
 
   function reset() {
     setStep("folder");
-    setImageDataUrl(null);
+    setImages([]);
     setDriveLink(null);
     setErrorMsg(null);
     setCustomName("");
     setFolder(todayFolder());
-    resetOcr();
-    setEditedText("");
   }
 
   return (
@@ -159,37 +142,73 @@ export default function Home() {
                 Cambiar
               </button>
             </div>
+
             <CameraCapture onCapture={handleCapture} />
+
+            {/* Miniaturas de fotos tomadas */}
+            {images.length > 0 && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Fotos tomadas ({images.length})
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {images.map((img, i) => (
+                    <div key={i} className="relative">
+                      <img
+                        src={img}
+                        alt={`Foto ${i + 1}`}
+                        className="w-16 h-20 object-cover rounded-lg border border-gray-200"
+                      />
+                      <button
+                        onClick={() => removeImage(i)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center leading-none"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setStep("preview")}
+                  className="w-full px-4 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors"
+                >
+                  ✅ Revisar y subir ({images.length} {images.length === 1 ? "foto" : "fotos"})
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {/* Step: preview */}
-        {step === "preview" && imageDataUrl && (
-          <div className="flex flex-col gap-4 items-center">
-            <img src={imageDataUrl} alt="Foto capturada" className="rounded-xl w-full border border-gray-200 shadow-sm" />
-            {/* OCR text block */}
-          <div className="w-full flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Texto extraído</label>
-              {ocrLoading && <span className="text-xs text-blue-500 animate-pulse">Analizando...</span>}
-            </div>
-            {ocrLoading ? (
-              <div className="w-full h-28 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center">
-                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        {step === "preview" && images.length > 0 && (
+          <div className="flex flex-col gap-4">
+            {/* Grid de miniaturas */}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                {images.length} {images.length === 1 ? "página" : "páginas"} en el PDF
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {images.map((img, i) => (
+                  <div key={i} className="relative">
+                    <img
+                      src={img}
+                      alt={`Página ${i + 1}`}
+                      className="w-16 h-20 object-cover rounded-lg border border-gray-200"
+                    />
+                    <button
+                      onClick={() => removeImage(i)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center leading-none"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
               </div>
-            ) : (
-              <textarea
-                value={editedText || ocrText || ""}
-                onChange={(e) => setEditedText(e.target.value)}
-                placeholder="El texto del documento aparecerá aquí..."
-                rows={6}
-                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-400 resize-none font-mono"
-              />
-            )}
-            <p className="text-[11px] text-gray-400">Puedes editar el texto antes de subir</p>
-          </div>
+            </div>
 
-          <div className="w-full flex flex-col gap-1">
+            {/* Nombre del archivo */}
+            <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Nombre del archivo</label>
               <input
                 type="text"
@@ -198,11 +217,18 @@ export default function Home() {
                 placeholder={`reporte_${folder.tienda}_${new Date().getFullYear()}_...`}
                 className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:border-blue-400"
               />
-              <p className="text-[11px] text-gray-400">Se guardará como <span className="font-mono">{(customName.trim() ? customName.trim().replace(/\.pdf$/i, "") : `reporte_${folder.tienda}`)}_{ `${new Date().getFullYear()}_${String(MESES_INDEX.indexOf(folder.mes)+1).padStart(2,"0")}_${String(folder.dia).padStart(2,"0")}`}.pdf</span></p>
+              <p className="text-[11px] text-gray-400">
+                Se guardará como{" "}
+                <span className="font-mono">
+                  {(customName.trim() ? customName.trim().replace(/\.pdf$/i, "") : `reporte_${folder.tienda}`)}_
+                  {`${new Date().getFullYear()}_${String(MESES_INDEX.indexOf(folder.mes) + 1).padStart(2, "0")}_${String(folder.dia).padStart(2, "0")}`}.pdf
+                </span>
+              </p>
             </div>
+
             <div className="flex gap-2 w-full">
               <button onClick={() => setStep("capture")} className="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                Repetir
+                + Foto
               </button>
               <button onClick={handleDownload} className="flex-1 px-3 py-2.5 border border-blue-300 rounded-xl text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors">
                 Descargar

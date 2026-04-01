@@ -2,7 +2,9 @@ import { useCallback } from "react";
 
 export function usePdfGenerator() {
   const generatePdf = useCallback(
-    async (imageDataUrl: string, filename = "reporte"): Promise<Blob> => {
+    async (imageDataUrls: string | string[]): Promise<Blob> => {
+      const images = Array.isArray(imageDataUrls) ? imageDataUrls : [imageDataUrls];
+
       const jsPDFModule = await import("jspdf");
       const JsPDF = jsPDFModule.default ?? (jsPDFModule as any).jsPDF;
       const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -10,19 +12,24 @@ export function usePdfGenerator() {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 10;
-      const imgWidth = pageWidth - margin * 2;
+      const maxW = pageWidth - margin * 2;
+      const maxH = pageHeight - margin * 2;
 
-      const img = new Image();
-      img.src = imageDataUrl;
-      await new Promise<void>((resolve) => {
-        img.onload = () => resolve();
-      });
+      for (let i = 0; i < images.length; i++) {
+        if (i > 0) doc.addPage();
 
-      const ratio = img.naturalHeight / img.naturalWidth;
-      const imgHeight = Math.min(imgWidth * ratio, pageHeight - margin * 2);
+        const dataUrl = images[i];
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise<void>((resolve) => { img.onload = () => resolve(); });
 
-      const format = imageDataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
-      doc.addImage(imageDataUrl, format, margin, margin, imgWidth, imgHeight);
+        const ratio = img.naturalHeight / img.naturalWidth;
+        const imgWidth = maxW;
+        const imgHeight = Math.min(imgWidth * ratio, maxH);
+
+        const format = dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+        doc.addImage(dataUrl, format, margin, margin, imgWidth, imgHeight);
+      }
 
       return doc.output("blob");
     },
@@ -30,7 +37,9 @@ export function usePdfGenerator() {
   );
 
   const downloadPdf = useCallback(
-    async (imageDataUrl: string, filename = "reporte") => {
+    async (imageDataUrls: string | string[], filename = "reporte") => {
+      const images = Array.isArray(imageDataUrls) ? imageDataUrls : [imageDataUrls];
+
       const jsPDFModule = await import("jspdf");
       const JsPDF = jsPDFModule.default ?? (jsPDFModule as any).jsPDF;
       const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
@@ -38,51 +47,29 @@ export function usePdfGenerator() {
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 10;
-      const imgWidth = pageWidth - margin * 2;
+      const maxW = pageWidth - margin * 2;
+      const maxH = pageHeight - margin * 2;
 
-      const img = new Image();
-      img.src = imageDataUrl;
-      await new Promise<void>((resolve) => {
-        img.onload = () => resolve();
-      });
+      for (let i = 0; i < images.length; i++) {
+        if (i > 0) doc.addPage();
 
-      const ratio = img.naturalHeight / img.naturalWidth;
-      const imgHeight = Math.min(imgWidth * ratio, pageHeight - margin * 2);
+        const dataUrl = images[i];
+        const img = new Image();
+        img.src = dataUrl;
+        await new Promise<void>((resolve) => { img.onload = () => resolve(); });
 
-      const format = imageDataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
-      doc.addImage(imageDataUrl, format, margin, margin, imgWidth, imgHeight);
+        const ratio = img.naturalHeight / img.naturalWidth;
+        const imgWidth = maxW;
+        const imgHeight = Math.min(imgWidth * ratio, maxH);
+
+        const format = dataUrl.startsWith("data:image/jpeg") ? "JPEG" : "PNG";
+        doc.addImage(dataUrl, format, margin, margin, imgWidth, imgHeight);
+      }
+
       doc.save(`${filename}.pdf`);
     },
     []
   );
 
-  const generateTextPdf = useCallback(async (text: string): Promise<Blob> => {
-    const jsPDFModule = await import("jspdf");
-    const JsPDF = jsPDFModule.default ?? (jsPDFModule as any).jsPDF;
-    const doc = new JsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-
-    const margin = 15;
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const maxWidth = pageWidth - margin * 2;
-    const lineHeight = 6;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-
-    const lines = doc.splitTextToSize(text, maxWidth);
-    let y = margin;
-    for (const line of lines) {
-      if (y + lineHeight > pageHeight - margin) {
-        doc.addPage();
-        y = margin;
-      }
-      doc.text(line, margin, y);
-      y += lineHeight;
-    }
-
-    return doc.output("blob");
-  }, []);
-
-  return { generatePdf, downloadPdf, generateTextPdf };
+  return { generatePdf, downloadPdf };
 }
