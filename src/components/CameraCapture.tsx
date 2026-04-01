@@ -7,7 +7,8 @@ interface CameraCaptureProps {
 }
 
 export default function CameraCapture({ onCapture }: CameraCaptureProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -19,15 +20,25 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
         if (dataUrl) onCapture(dataUrl);
       };
       reader.readAsDataURL(file);
-      e.target.value = ""; // reset so same file can re-trigger
+      e.target.value = "";
     },
     [onCapture]
   );
 
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center gap-3 w-full">
+      {/* Camera input — opens camera directly */}
       <input
-        ref={inputRef}
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFile}
+      />
+      {/* Gallery input — on iOS shows "Escanear documento" option */}
+      <input
+        ref={galleryInputRef}
         type="file"
         accept="image/*"
         className="hidden"
@@ -35,18 +46,18 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
       />
 
       <button
-        onClick={() => inputRef.current?.click()}
+        onClick={() => cameraInputRef.current?.click()}
         className="w-full px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
       >
-        Escanear / Tomar foto
+        📷 Tomar foto
       </button>
 
-      <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700 w-full">
-        <p className="font-semibold mb-1">📱 iPhone / iPad</p>
-        <p>Selecciona <strong>"Escanear documento"</strong> para recorte y corrección automática.</p>
-        <p className="mt-2 font-semibold">🤖 Android</p>
-        <p>Usa el <strong>modo documento</strong> de tu cámara si está disponible.</p>
-      </div>
+      <button
+        onClick={() => galleryInputRef.current?.click()}
+        className="w-full px-6 py-3 border border-blue-300 text-blue-600 rounded-xl font-medium hover:bg-blue-50 transition-colors text-sm"
+      >
+        📄 Escanear documento (iPhone) / Galería
+      </button>
     </div>
   );
 }
