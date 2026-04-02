@@ -5,38 +5,6 @@ import CameraCapture from "@/components/CameraCapture";
 import FolderSelector, { type FolderSelection } from "@/components/FolderSelector";
 import { usePdfGenerator } from "@/hooks/usePdfGenerator";
 
-const GAS_URL = process.env.NEXT_PUBLIC_GOOGLE_APPS_SCRIPT_URL ?? "";
-
-async function uploadToGas(blob: Blob, filename: string, folderPath: string): Promise<string> {
-  // Convert blob to base64 via FileReader (avoids btoa size limits)
-  const fileData = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(",")[1]); // strip data URL prefix
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-
-  // text/plain avoids CORS preflight — GAS receives the JSON in e.postData.contents
-  const res = await fetch(GAS_URL, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain" },
-    body: JSON.stringify({ fileData, fileName: filename, mimeType: "application/pdf", folderPath }),
-    redirect: "follow",
-  });
-
-  if (!res.ok) throw new Error(`Error ${res.status}`);
-
-  const text = await res.text();
-  try {
-    const json = JSON.parse(text);
-    return json.viewLink ?? json.url ?? text;
-  } catch {
-    return text;
-  }
-}
 
 type Step = "folder" | "capture" | "preview" | "uploading" | "done" | "error";
 type PendingPdf = { images: string[]; name: string };
@@ -118,8 +86,16 @@ export default function Home() {
       const links: string[] = [];
       for (const pdf of allPdfs) {
         const blob = await generatePdf(pdf.images);
-        const viewLink = await uploadToGas(blob, `${pdf.name}.pdf`, folderPath);
-        links.push(viewLink);
+        const formData = new FormData();
+        formData.append("file", blob, `${pdf.name}.pdf`);
+        formData.append("filename", `${pdf.name}.pdf`);
+        formData.append("folderPath", folderPath);
+        const res = await fetch("/api/upload-drive", { method: "POST", body: formData });
+        const text = await res.text();
+        let data: Record<string, string> = {};
+        try { data = JSON.parse(text); } catch {}
+        if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+        links.push(data.viewLink);
       }
       setDriveLinks(links);
       setPendingPdfs([]);
