@@ -47,12 +47,12 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
-      {/* Main input — no capture attr so iOS shows "Scan Document" option in picker */}
+      {/* Camera input — opens camera directly */}
       <input
         ref={cameraInputRef}
         type="file"
         accept="image/*"
-        multiple
+        capture="environment"
         className="hidden"
         onChange={handleFile}
       />
@@ -70,14 +70,14 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
         onClick={() => cameraInputRef.current?.click()}
         className="w-full px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
       >
-        📷 Cámara / Escanear documento
+        📷 Tomar foto
       </button>
 
       <button
         onClick={() => galleryInputRef.current?.click()}
         className="w-full px-6 py-3 border border-blue-300 text-blue-600 rounded-xl font-medium hover:bg-blue-50 transition-colors text-sm"
       >
-        🖼️ Galería
+        📄 Escanear documento / Galería
       </button>
     </div>
   );
