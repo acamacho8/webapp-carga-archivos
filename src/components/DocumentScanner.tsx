@@ -75,7 +75,7 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
     // Step 2: threshold — fondo blanco, texto negro (estilo CamScanner)
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
-    const threshold = 160;
+    const threshold = 100;
     for (let i = 0; i < data.length; i += 4) {
       const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
       const value = avg > threshold ? 255 : 0;
