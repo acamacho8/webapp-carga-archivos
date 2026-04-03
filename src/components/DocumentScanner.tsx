@@ -90,14 +90,6 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
 
-      {/* Starting camera */}
-      {status === "starting" && (
-        <div className="flex-1 flex flex-col items-center justify-center gap-4">
-          <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
-          <p className="text-white text-sm">Iniciando cámara…</p>
-        </div>
-      )}
-
       {/* Error */}
       {status === "error" && (
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8 text-center">
@@ -108,11 +100,10 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
         </div>
       )}
 
-      {/* Live video */}
-      {status === "scanning" && (
+      {/* Live video — always mounted so videoRef is valid when getUserMedia resolves */}
+      {status !== "error" && status !== "preview" && (
         <div className="flex flex-col flex-1">
           <div className="relative flex-1 overflow-hidden">
-            {/* Native HTML5 video — opens instantly */}
             <video
               ref={videoRef}
               autoPlay
@@ -121,8 +112,16 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
               className="absolute inset-0 w-full h-full object-cover"
             />
 
-            {/* Document guide overlay */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            {/* Spinner overlay while camera initialises */}
+            {status === "starting" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black">
+                <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                <p className="text-white text-sm">Iniciando cámara…</p>
+              </div>
+            )}
+
+            {/* Document guide overlay — only when live */}
+            {status === "scanning" && <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div
                 className="relative"
                 style={{
@@ -141,13 +140,15 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
                   <div key={i} className={`absolute w-7 h-7 border-white ${cls}`} />
                 ))}
               </div>
-            </div>
+            </div>}
 
-            <div className="absolute top-4 inset-x-0 flex justify-center pointer-events-none">
-              <span className="bg-black/50 text-white text-xs font-medium px-3 py-1 rounded-full">
-                Alinea el documento y captura
-              </span>
-            </div>
+            {status === "scanning" && (
+              <div className="absolute top-4 inset-x-0 flex justify-center pointer-events-none">
+                <span className="bg-black/50 text-white text-xs font-medium px-3 py-1 rounded-full">
+                  Alinea el documento y captura
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Controls */}
