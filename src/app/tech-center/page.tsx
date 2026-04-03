@@ -651,9 +651,34 @@ function TabMonitor({ setRealLogs }: { setRealLogs: React.Dispatch<React.SetStat
 }
 
 // ─── Tab: Infraestructura y Tiendas ──────────────────────────────────────────
+interface PrinterLive { id: string; online: boolean; latency: number }
+
 function TabInfra() {
   const [copiedIp, setCopiedIp] = useState<string | null>(null);
   const [visible, setVisible] = useState<Record<string, boolean>>({});
+  const [printers, setPrinters] = useState<PrinterLive[]>([]);
+  const [printerTs, setPrinterTs] = useState<string | null>(null);
+  const [printerLoading, setPrinterLoading] = useState(true);
+
+  const fetchPrinters = useCallback(async () => {
+    try {
+      const res = await fetch('/api/printer-status');
+      if (!res.ok) return;
+      const data = await res.json();
+      setPrinters(data.printers);
+      setPrinterTs(new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch {
+      // keep previous state on error
+    } finally {
+      setPrinterLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPrinters();
+    const id = setInterval(fetchPrinters, 30_000);
+    return () => clearInterval(id);
+  }, [fetchPrinters]);
 
   const handleCopy = useCallback((ip: string) => {
     navigator.clipboard.writeText(ip).catch(() => {});
@@ -669,45 +694,75 @@ function TabInfra() {
     <div className="space-y-5">
       {/* Store directory */}
       <div>
-        <SectionTitle icon={Server} label="Directorio de Tiendas" />
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Server size={15} className="text-cyan-400" />
+            <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Directorio de Tiendas — Impresoras Fiscales</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {printerLoading && <Loader2 size={11} className="animate-spin text-slate-500" />}
+            {printerTs && !printerLoading && (
+              <span className="font-mono text-[10px] text-slate-600">Actualizado {printerTs}</span>
+            )}
+            <button onClick={fetchPrinters} className="rounded border border-slate-700 p-1 text-slate-500 hover:text-cyan-400 transition-colors">
+              <RefreshCw size={11} />
+            </button>
+          </div>
+        </div>
         <Card className="overflow-x-auto p-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800 text-xs text-slate-500 uppercase tracking-wide">
-                {['Tienda', 'IP Estática', 'Puerto OP3', 'Impresora Fiscal', 'Estado', 'Acciones'].map(h => (
+                {['Tienda', 'IP Estática', 'Puerto OP3', 'Impresora Fiscal', 'Estado TCP', 'Latencia', 'Acciones'].map(h => (
                   <th key={h} className="px-4 py-3 text-left font-semibold">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {STORES.map((store, i) => (
-                <tr key={store.id} className={twMerge('border-b border-slate-800/60 transition-colors hover:bg-slate-800/40', i === STORES.length - 1 && 'border-0')}>
-                  <td className="px-4 py-3">
-                    <span className="font-mono text-xs font-bold text-yellow-400">{store.id}</span>
-                    <span className="ml-2 text-slate-400">{store.name}</span>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-cyan-300">{store.ip}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-300">{store.port}</td>
-                  <td className="px-4 py-3 text-xs text-slate-300">{store.printer}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      {store.online
-                        ? <><Wifi size={12} className="text-emerald-400" /><span className="text-xs text-emerald-400">Online</span></>
-                        : <><WifiOff size={12} className="text-red-400" /><span className="text-xs text-red-400">Offline</span></>
+              {STORES.map((store, i) => {
+                const live = printers.find(p => p.id === store.id);
+                const online = live?.online ?? store.online;
+                const latency = live?.latency;
+                return (
+                  <tr key={store.id} className={twMerge('border-b border-slate-800/60 transition-colors hover:bg-slate-800/40', i === STORES.length - 1 && 'border-0')}>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs font-bold text-yellow-400">{store.id}</span>
+                      <span className="ml-2 text-slate-400">{store.name}</span>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-cyan-300">{store.ip}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-300">{store.port}</td>
+                    <td className="px-4 py-3 text-xs text-slate-300">{store.printer}</td>
+                    <td className="px-4 py-3">
+                      {printerLoading && !live
+                        ? <Loader2 size={12} className="animate-spin text-slate-500" />
+                        : <div className="flex items-center gap-1.5">
+                            {online
+                              ? <><Wifi size={12} className="text-emerald-400" /><span className="text-xs text-emerald-400">Online</span></>
+                              : <><WifiOff size={12} className="text-red-400" /><span className="text-xs text-red-400">Offline</span></>
+                            }
+                          </div>
                       }
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => handleCopy(store.ip)}
-                      className="flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 font-mono text-[10px] text-slate-400 transition-all hover:border-cyan-600 hover:text-cyan-400"
-                    >
-                      {copiedIp === store.ip ? <CheckCircle2 size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                      {copiedIp === store.ip ? 'Copiado' : 'Copy IP'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-4 py-3">
+                      {latency != null
+                        ? <span className={twMerge('font-mono text-xs', online ? 'text-emerald-400' : 'text-slate-600')}>
+                            {online ? `${latency}ms` : '—'}
+                          </span>
+                        : <span className="font-mono text-xs text-slate-600">—</span>
+                      }
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => handleCopy(store.ip)}
+                        className="flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 font-mono text-[10px] text-slate-400 transition-all hover:border-cyan-600 hover:text-cyan-400"
+                      >
+                        {copiedIp === store.ip ? <CheckCircle2 size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                        {copiedIp === store.ip ? 'Copiado' : 'Copy IP'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </Card>
