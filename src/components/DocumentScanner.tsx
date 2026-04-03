@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 
-type ScanStatus = "loading" | "scanning" | "processing" | "preview" | "error";
+type ScanStatus = "starting" | "scanning" | "processing" | "preview" | "error";
 
 interface Props {
   onCapture: (dataUrl: string) => void;
@@ -25,25 +25,35 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
   const rafRef = useRef<number>(0);
   const cvRef = useRef<any>(null);
 
-  const [status, setStatus] = useState<ScanStatus>("loading");
+  const [status, setStatus] = useState<ScanStatus>("starting");
+  const [cvReady, setCvReady] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [cornersFound, setCornersFound] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Load OpenCV from /public/opencv.js (avoids bundler issues with Node.js modules)
+  // Load OpenCV — may already be preloaded by CameraCapture
   useEffect(() => {
     const win = window as any;
 
     function initCv(cv: any) {
       if (cv.Mat) {
         cvRef.current = cv;
+        setCvReady(true);
       } else {
-        cv.onRuntimeInitialized = () => { cvRef.current = cv; };
+        cv.onRuntimeInitialized = () => { cvRef.current = cv; setCvReady(true); };
       }
     }
 
-    if (win.cv) {
-      initCv(win.cv);
+    if (win.cv?.Mat) {
+      cvRef.current = win.cv;
+      setCvReady(true);
+      return;
+    }
+
+    // If preload script already in DOM, just wait for it
+    const existing = document.querySelector('script[src="/opencv.js"]') as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener("load", () => initCv(win.cv));
       return;
     }
 
@@ -70,7 +80,7 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
       }
     }).catch(() => {
       setErrorMsg("No se pudo acceder a la cámara");
-      setStatus("error");
+      setStatus("error");  // camera fail is fatal
     });
 
     return () => {
@@ -81,7 +91,7 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
 
   // Real-time corner detection loop (runs every 500ms to avoid battery drain)
   useEffect(() => {
-    if (status !== "scanning") return;
+    if (status !== "scanning" || !cvReady) return;
     let lastRun = 0;
 
     const loop = () => {
@@ -95,7 +105,7 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
 
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [status]);
+  }, [status, cvReady]);
 
   function runDetection(fullRes: boolean): [number, number][] | null {
     const cv = cvRef.current;
@@ -310,11 +320,11 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
   return (
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
 
-      {/* Loading */}
-      {status === "loading" && (
+      {/* Starting camera */}
+      {status === "starting" && (
         <div className="flex-1 flex flex-col items-center justify-center gap-4">
           <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin" />
-          <p className="text-white text-sm">Cargando escáner…</p>
+          <p className="text-white text-sm">Iniciando cámara…</p>
         </div>
       )}
 
@@ -372,13 +382,21 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
                 </div>
               </div>
             )}
-            {/* Status pill */}
-            <div className="absolute top-4 left-0 right-0 flex justify-center pointer-events-none">
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                cornersFound ? "bg-green-500 text-white" : "bg-black bg-opacity-50 text-white"
-              }`}>
-                {cornersFound ? "✓ Documento detectado" : "Apunta al documento"}
-              </span>
+            {/* Status pills */}
+            <div className="absolute top-4 left-0 right-0 flex justify-center gap-2 pointer-events-none">
+              {!cvReady && (
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-yellow-500 text-black flex items-center gap-1">
+                  <span className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin inline-block" />
+                  Cargando detector…
+                </span>
+              )}
+              {cvReady && (
+                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                  cornersFound ? "bg-green-500 text-white" : "bg-black bg-opacity-50 text-white"
+                }`}>
+                  {cornersFound ? "✓ Documento detectado" : "Apunta al documento"}
+                </span>
+              )}
             </div>
           </div>
 
