@@ -30,22 +30,32 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
   const [cornersFound, setCornersFound] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Load OpenCV WASM
+  // Load OpenCV from /public/opencv.js (avoids bundler issues with Node.js modules)
   useEffect(() => {
-    import("@techstark/opencv-js").then((mod) => {
-      const cv = mod.default;
-      const check = () => {
-        if (cv.Mat) {
-          cvRef.current = cv;
-        } else {
-          (cv as any).onRuntimeInitialized = () => { cvRef.current = cv; };
-        }
-      };
-      check();
-    }).catch(() => {
+    const win = window as any;
+
+    function initCv(cv: any) {
+      if (cv.Mat) {
+        cvRef.current = cv;
+      } else {
+        cv.onRuntimeInitialized = () => { cvRef.current = cv; };
+      }
+    }
+
+    if (win.cv) {
+      initCv(win.cv);
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "/opencv.js";
+    script.async = true;
+    script.onload = () => initCv(win.cv);
+    script.onerror = () => {
       setErrorMsg("No se pudo cargar el motor de escaneo");
       setStatus("error");
-    });
+    };
+    document.head.appendChild(script);
   }, []);
 
   // Start camera
