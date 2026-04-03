@@ -5,7 +5,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 type Status = "starting" | "scanning" | "preview" | "error";
 
 interface Props {
-  onCapture: (dataUrl: string) => void;
+  onCapture: (dataUrls: string[]) => void;
   onClose: () => void;
 }
 
@@ -16,8 +16,10 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
 
   const [status, setStatus] = useState<Status>("starting");
   const [preview, setPreview] = useState<string | null>(null);
+  const [parts, setParts] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Start camera stream on mount
   useEffect(() => {
     navigator.mediaDevices
       .getUserMedia({
@@ -44,6 +46,17 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  // Re-attach stream when returning from preview (fixes retake hang)
+  useEffect(() => {
+    if (status !== "scanning") return;
+    const video = videoRef.current;
+    if (!video || !streamRef.current) return;
+    if (video.srcObject !== streamRef.current) {
+      video.srcObject = streamRef.current;
+      video.play().catch(() => {});
+    }
+  }, [status]);
 
   const capture = useCallback(() => {
     const video = videoRef.current;
@@ -76,15 +89,25 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
     setStatus("preview");
   }, []);
 
-  function confirm() {
-    if (!preview) return;
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    onCapture(preview);
-  }
-
+  // Discard current preview, go back to camera (keeps saved parts)
   function retake() {
     setPreview(null);
     setStatus("scanning");
+  }
+
+  // Save current preview as a part, go back to camera for the next
+  function addPart() {
+    if (!preview) return;
+    setParts((prev) => [...prev, preview]);
+    setPreview(null);
+    setStatus("scanning");
+  }
+
+  // Finalize — send all parts + current preview to parent
+  function confirm() {
+    if (!preview) return;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    onCapture([...parts, preview]);
   }
 
   return (
@@ -145,7 +168,9 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
             {status === "scanning" && (
               <div className="absolute top-4 inset-x-0 flex justify-center pointer-events-none">
                 <span className="bg-black/50 text-white text-xs font-medium px-3 py-1 rounded-full">
-                  Alinea el documento y captura
+                  {parts.length > 0
+                    ? `Parte ${parts.length + 1} — ${parts.length} parte${parts.length > 1 ? "s" : ""} guardada${parts.length > 1 ? "s" : ""}`
+                    : "Alinea el documento y captura"}
                 </span>
               </div>
             )}
@@ -171,6 +196,15 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
       {/* Preview */}
       {status === "preview" && preview && (
         <div className="flex flex-col flex-1 bg-gray-900">
+          {/* Part counter badge */}
+          {parts.length > 0 && (
+            <div className="flex justify-center pt-3">
+              <span className="bg-blue-600 text-white text-xs font-semibold px-3 py-1 rounded-full">
+                Parte {parts.length + 1} de al menos {parts.length + 1}
+              </span>
+            </div>
+          )}
+
           <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
             <img
               src={preview}
@@ -178,7 +212,8 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
               className="max-w-full max-h-full rounded-lg shadow-lg"
             />
           </div>
-          <div className="bg-black px-6 py-6 flex gap-3">
+
+          <div className="bg-black px-4 py-5 flex gap-2">
             <button
               onClick={retake}
               className="flex-1 py-3 border border-white text-white rounded-xl font-medium text-sm"
@@ -186,10 +221,16 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
               Repetir
             </button>
             <button
+              onClick={addPart}
+              className="flex-1 py-3 border border-blue-400 text-blue-400 rounded-xl font-medium text-sm"
+            >
+              + Agregar parte
+            </button>
+            <button
               onClick={confirm}
               className="flex-1 py-3 bg-green-500 text-white rounded-xl font-semibold text-sm"
             >
-              ✓ Usar imagen
+              ✓ Usar{parts.length > 0 ? ` (${parts.length + 1})` : ""}
             </button>
           </div>
         </div>

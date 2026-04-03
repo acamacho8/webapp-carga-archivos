@@ -33,9 +33,9 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
     [onCapture]
   );
 
-  function handleScannerCapture(dataUrl: string) {
+  function handleScannerCapture(dataUrls: string[]) {
     setScannerOpen(false);
-    onCapture(dataUrl);
+    dataUrls.forEach((url) => onCapture(url));
   }
 
   return (
