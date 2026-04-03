@@ -23,7 +23,7 @@ type SyncStatus = 'sincronizado' | 'pendiente' | 'sin_actividad' | 'error';
 interface StoreStaff { name: string; role: 'Gerente' | 'Subgerente'; days: number[] }
 interface StoreSyncState {
   id: string; name: string; status: SyncStatus;
-  lastSync: string | null; orders: number; staff: StoreStaff[];
+  lastSync: string | null; orders: number; totalUsd: number; staff: StoreStaff[];
 }
 
 // days: 0=Dom 1=Lun 2=Mar 3=Mié 4=Jue 5=Vie 6=Sáb
@@ -31,7 +31,7 @@ function onDutyToday(staff: StoreStaff[]): StoreStaff | undefined {
   const today = new Date().getDay();
   return staff.find(s => s.days.includes(today));
 }
-interface Service { name: string; status: ServiceStatus }
+interface Service { name: string; status: ServiceStatus; latency?: number }
 interface Store {
   id: string; name: string; ip: string; port: number;
   printer: string; online: boolean;
@@ -197,7 +197,7 @@ function MetricChart({
 }
 
 // ─── Tab: Monitor En Vivo ─────────────────────────────────────────────────────
-function TabMonitor() {
+function TabMonitor({ setRealLogs }: { setRealLogs: React.Dispatch<React.SetStateAction<string[]>> }) {
   const [cpu, setCpu] = useState<MetricPoint[]>([]);
   const [ram, setRam] = useState<MetricPoint[]>([]);
   const [disk, setDisk] = useState<MetricPoint[]>([]);
@@ -229,9 +229,9 @@ function TabMonitor() {
   };
 
   const [syncStores, setSyncStores] = useState<StoreSyncState[]>([
-    { id: 'FQ01', name: 'CC Sambil',            status: 'sin_actividad', lastSync: null, orders: 0, staff: STAFF_CONFIG.FQ01 },
-    { id: 'FQ28', name: 'El Marqués',           status: 'sin_actividad', lastSync: null, orders: 0, staff: STAFF_CONFIG.FQ28 },
-    { id: 'FQ88', name: 'Sambil La Candelaria', status: 'sin_actividad', lastSync: null, orders: 0, staff: STAFF_CONFIG.FQ88 },
+    { id: 'FQ01', name: 'CC Sambil',            status: 'sin_actividad', lastSync: null, orders: 0, totalUsd: 0, staff: STAFF_CONFIG.FQ01 },
+    { id: 'FQ28', name: 'El Marqués',           status: 'sin_actividad', lastSync: null, orders: 0, totalUsd: 0, staff: STAFF_CONFIG.FQ28 },
+    { id: 'FQ88', name: 'Sambil La Candelaria', status: 'sin_actividad', lastSync: null, orders: 0, totalUsd: 0, staff: STAFF_CONFIG.FQ88 },
   ]);
   const [syncLoading, setSyncLoading] = useState(true);
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -250,11 +250,20 @@ function TabMonitor() {
           name: STORE_NAMES[s.id] ?? s.name,
           status: live.status as SyncStatus,
           orders: live.orders,
+          totalUsd: live.totalUsd ?? 0,
           lastSync: live.status === 'sincronizado'
             ? new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true })
             : s.lastSync,
         };
       }));
+      // Generate real log lines from sync data
+      const newLogs: string[] = data.stores.map((d: { id: string; status: string; orders: number; totalUsd: number }) => {
+        const t = new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        if (d.status === 'sincronizado') return `[${t}] [${d.id} Sync] ${d.orders} órdenes — $${d.totalUsd.toFixed(2)} USD`;
+        if (d.status === 'error') return `[${t}] [${d.id} Sync] ⚠ Error al conectar con la tienda`;
+        return `[${t}] [${d.id} Sync] Sin actividad registrada hoy`;
+      });
+      setRealLogs(prev => [...newLogs, ...prev].slice(0, 30));
       setLastFetched(new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     } catch {
       // keep previous state on error
@@ -319,12 +328,22 @@ function TabMonitor() {
     return () => clearInterval(id);
   }, []);
 
-  useEffect(() => {
-    const id = setInterval(() => {
-      setServices(prev => prev.map(s => ({ ...s, status: randomStatus() })));
-    }, 8000);
-    return () => clearInterval(id);
+  const fetchHealth = useCallback(async () => {
+    try {
+      const res = await fetch('/api/health-check');
+      if (!res.ok) return;
+      const data = await res.json();
+      setServices(data.services);
+    } catch {
+      // keep previous state
+    }
   }, []);
+
+  useEffect(() => {
+    fetchHealth();
+    const id = setInterval(fetchHealth, 30_000);
+    return () => clearInterval(id);
+  }, [fetchHealth]);
 
   const handleAction = useCallback((label: string) => {
     setActionMsg(`✓ ${label} enviado`);
@@ -368,6 +387,9 @@ function TabMonitor() {
                     <span className="text-sm text-slate-300">{s.name}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
+                    {s.latency != null && s.latency > 0 && (
+                      <span className="font-mono text-[10px] text-slate-600">{s.latency}ms</span>
+                    )}
                     <StatusDot status={s.status} />
                     <span className={twMerge(
                       'font-mono text-xs',
@@ -458,11 +480,17 @@ function TabMonitor() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
                   <div>
                     <div className="text-[10px] text-slate-500 uppercase tracking-wide">Órdenes</div>
                     <div className="font-mono text-base font-bold text-cyan-300">
                       {isSyncing ? <Loader2 size={14} className="animate-spin text-cyan-400" /> : store.orders > 0 ? store.orders : '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wide">Ventas</div>
+                    <div className="font-mono text-sm font-bold text-green-400">
+                      {store.totalUsd > 0 ? `$${store.totalUsd.toFixed(2)}` : '—'}
                     </div>
                   </div>
                   <div>
@@ -740,24 +768,8 @@ function TabInfra() {
 }
 
 // ─── Tab: Centro de Soporte ───────────────────────────────────────────────────
-function TabSoporte() {
+function TabSoporte({ realLogs }: { realLogs: string[] }) {
   const terminalRef = useRef<HTMLDivElement>(null);
-  const [logs, setLogs] = useState<string[]>(() => LOG_LINES.slice(0, 5));
-  const logIndex = useRef(5);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const next = LOG_LINES[logIndex.current % LOG_LINES.length];
-      logIndex.current++;
-      setLogs(prev => [...prev, next]);
-      setTimeout(() => {
-        if (terminalRef.current) {
-          terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-        }
-      }, 50);
-    }, 1500);
-    return () => clearInterval(id);
-  }, []);
 
   return (
     <div className="space-y-5">
@@ -802,14 +814,12 @@ function TabSoporte() {
             ref={terminalRef}
             className="h-52 overflow-y-auto bg-black/60 px-4 py-3 font-mono text-xs leading-relaxed text-green-400 scrollbar-thin"
           >
-            {logs.map((line, i) => (
-              <div key={i} className="flex gap-2">
-                <span className="shrink-0 text-slate-600 select-none">
-                  {new Date(Date.now() - (logs.length - 1 - i) * 1500).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </span>
-                <span>{line}</span>
-              </div>
-            ))}
+            {realLogs.length === 0
+              ? <span className="text-slate-600">Esperando datos del CRM…</span>
+              : realLogs.map((line, i) => (
+                  <div key={i} className="font-mono text-xs text-emerald-400 leading-5">{line}</div>
+                ))
+            }
             <div className="mt-1 flex items-center gap-1">
               <span className="text-yellow-400">$</span>
               <span className="animate-pulse text-slate-500">▋</span>
@@ -830,6 +840,7 @@ const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
 
 export default function TechCenter() {
   const [activeTab, setActiveTab] = useState<Tab>('monitor');
+  const [realLogs, setRealLogs] = useState<string[]>([]);
 
   return (
     <div className="min-h-screen bg-[#020617] px-4 py-6 text-slate-100 sm:px-8 lg:px-12" suppressHydrationWarning>
@@ -885,9 +896,9 @@ export default function TechCenter() {
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.18 }}
         >
-          {activeTab === 'monitor' && <TabMonitor />}
+          {activeTab === 'monitor' && <TabMonitor setRealLogs={setRealLogs} />}
           {activeTab === 'infra' && <TabInfra />}
-          {activeTab === 'soporte' && <TabSoporte />}
+          {activeTab === 'soporte' && <TabSoporte realLogs={realLogs} />}
         </motion.div>
       </AnimatePresence>
     </div>
