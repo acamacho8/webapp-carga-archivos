@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useCallback, useState, useEffect } from "react";
+import { useRef, useCallback, useState } from "react";
 import { compressImage } from "@/utils/imageUtils";
 import DocumentScanner from "@/components/DocumentScanner";
 
@@ -13,15 +13,6 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
 
-  // Preload opencv.js in background as soon as this component renders
-  useEffect(() => {
-    const win = window as any;
-    if (win.cv || document.querySelector('script[src="/opencv.js"]')) return;
-    const script = document.createElement("script");
-    script.src = "/opencv.js";
-    script.async = true;
-    document.head.appendChild(script);
-  }, []);
 
   const handleFile = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
