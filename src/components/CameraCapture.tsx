@@ -1,30 +1,17 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState } from "react";
+import { compressImage } from "@/utils/imageUtils";
+import DocumentScanner from "@/components/DocumentScanner";
 
 interface CameraCaptureProps {
   onCapture: (dataUrl: string) => void;
 }
 
-function compressImage(dataUrl: string, maxWidth = 1400): Promise<string> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxWidth / img.width);
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.82));
-    };
-    img.src = dataUrl;
-  });
-}
-
 export default function CameraCapture({ onCapture }: CameraCaptureProps) {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const handleFile = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,40 +32,61 @@ export default function CameraCapture({ onCapture }: CameraCaptureProps) {
     [onCapture]
   );
 
+  function handleScannerCapture(dataUrl: string) {
+    setScannerOpen(false);
+    onCapture(dataUrl);
+  }
+
   return (
-    <div className="flex flex-col items-center gap-3 w-full">
-      {/* Camera input — opens camera directly */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleFile}
-      />
-      {/* Gallery-only input for selecting existing photos */}
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={handleFile}
-      />
+    <>
+      {scannerOpen && (
+        <DocumentScanner
+          onCapture={handleScannerCapture}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
 
-      <button
-        onClick={() => cameraInputRef.current?.click()}
-        className="w-full px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
-      >
-        📷 Tomar foto
-      </button>
+      <div className="flex flex-col items-center gap-3 w-full">
+        {/* Camera input — opens camera directly */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleFile}
+        />
+        {/* Gallery-only input */}
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handleFile}
+        />
 
-      <button
-        onClick={() => galleryInputRef.current?.click()}
-        className="w-full px-6 py-3 border border-blue-300 text-blue-600 rounded-xl font-medium hover:bg-blue-50 transition-colors text-sm"
-      >
-        📄 Escanear documento / Galería
-      </button>
-    </div>
+        <button
+          onClick={() => setScannerOpen(true)}
+          className="w-full px-6 py-4 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+        >
+          🔍 Escáner de documentos
+        </button>
+
+        <button
+          onClick={() => cameraInputRef.current?.click()}
+          className="w-full px-6 py-3 border border-blue-300 text-blue-600 rounded-xl font-medium hover:bg-blue-50 transition-colors text-sm"
+        >
+          📷 Tomar foto
+        </button>
+
+        <button
+          onClick={() => galleryInputRef.current?.click()}
+          className="w-full px-6 py-3 border border-gray-200 text-gray-600 rounded-xl font-medium hover:bg-gray-50 transition-colors text-sm"
+        >
+          🖼️ Galería
+        </button>
+      </div>
+    </>
   );
 }
