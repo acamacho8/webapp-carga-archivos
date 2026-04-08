@@ -84,10 +84,17 @@ function detectDocType(name: string): DocumentType {
 
 // ─── Helpers de fecha ─────────────────────────────────────────────────────────
 const MONTHS: Record<string, string> = {
+  // Nombres completos
   enero: '01', febrero: '02', marzo: '03', abril: '04',
   mayo: '05', junio: '06', julio: '07', agosto: '08',
   septiembre: '09', octubre: '10', noviembre: '11', diciembre: '12',
+  // Abreviaturas de 3 letras (certificados físicos escaneados, ej: "03 NOV 2026")
+  ene: '01', feb: '02', mar: '03', abr: '04',
+  may: '05', jun: '06', jul: '07', ago: '08',
+  sep: '09', set: '09', oct: '10', nov: '11', dic: '12',
 };
+
+const MONTH_NAMES = Object.keys(MONTHS).join('|');
 
 const DATE_PATTERNS = [
   // DD/MM/YYYY o DD-MM-YYYY
@@ -95,9 +102,11 @@ const DATE_PATTERNS = [
   // YYYY-MM-DD
   /(\d{4})-(\d{2})-(\d{2})/,
   // D de MMMM de YYYY (español)
-  /(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(?:del?\s+)?(\d{4})/,
+  new RegExp(`(\\d{1,2})\\s+de\\s+(${MONTH_NAMES})\\s+(?:del?\\s+)?(\\d{4})`),
+  // DD MMM YYYY o DD/MMM/YYYY (ej: "03 NOV 2026", "03/nov/2025") — certificados físicos
+  new RegExp(`(\\d{1,2})[\\s\\/\\-](${MONTH_NAMES})[\\s\\/\\-](\\d{4})`),
   // MMMM YYYY
-  /(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(?:del?\s+)?(\d{4})/,
+  new RegExp(`(${MONTH_NAMES})\\s+(?:del?\\s+)?(\\d{4})`),
 ];
 
 // Convierte un match de DATE_PATTERNS a YYYY-MM-DD, o null si no aplica
@@ -142,9 +151,45 @@ function findFirstDate(t: string): string | null {
   return null;
 }
 
+// Extrae TODAS las fechas de un snippet y devuelve la más tardía (útil para vencimientos)
+function findLatestDateInSnippet(snippet: string): string | null {
+  const found: string[] = [];
+  for (const pat of DATE_PATTERNS) {
+    const gPat = new RegExp(pat.source, 'gi');
+    let m: RegExpExecArray | null;
+    while ((m = gPat.exec(snippet)) !== null) {
+      const d = matchToDate(m);
+      if (d) found.push(d);
+    }
+  }
+  if (found.length === 0) return null;
+  return found.sort().at(-1) ?? null; // la fecha más futura
+}
+
+// ─── Normalizar texto OCR: une dígitos separados por espacios ────────────────
+// El OCR a menudo lee "0 3" en vez de "03", "2 0 2 6" en vez de "2026"
+function normalizeOcrText(raw: string): string {
+  let t = raw.toLowerCase().replace(/\s+/g, ' ');
+  // Dos pasadas para cubrir "2 0 2 6" → "2026"
+  t = t.replace(/(\d) (\d)/g, '$1$2');
+  t = t.replace(/(\d) (\d)/g, '$1$2');
+  return t;
+}
+
 // ─── Extraer fecha de vencimiento del texto del PDF ──────────────────────────
 function parseExpiryDate(text: string): string | null {
-  const t = text.toLowerCase().replace(/\s+/g, ' ');
+  const t = normalizeOcrText(text);
+
+  // ── Certificados médicos venezolanos (MPPS / Ministerio de Salud) ─────────
+  // La firma del médico suele cubrir el año del vencimiento → OCR lo lee mal.
+  // Solución fiable: fecha de emisión + 1 año (vigencia legal siempre 1 año).
+  const medicalKeywords = ['serologia', 'hepatitis b', 'toxoide tetanico', 'vacunas recibidas', 'tension ocular'];
+  const isMedicalCert = medicalKeywords.filter(kw => t.includes(kw)).length >= 2;
+  if (isMedicalCert) {
+    // La fecha de emisión aparece múltiples veces (Serología, HIV, etc.) → muy fiable
+    const issueDate = findFirstDate(t);
+    if (issueDate) return addOneYear(issueDate);
+  }
 
   // ── Detectar "vigente por un año" / "válido por 1 año" ────────────────────
   // Si el documento dice que tiene vigencia de 1 año, calculamos:
@@ -158,7 +203,11 @@ function parseExpiryDate(text: string): string | null {
     /por\s+(?:un|1|uno)\s+(?:\(1\)\s+)?a[ñn]o/,
   ];
 
-  const hasOneYear = ONE_YEAR_PATTERNS.some(p => p.test(t));
+  // Solo aplica si hay una fecha de vencimiento EXPLÍCITA que lo confirme;
+  // si el doc ya tiene "fecha vencimiento" con fecha, esa tiene prioridad
+  const hasExplicitExpiry = ['fecha vencimiento', 'fecha de vencimiento', 'vencimiento:', 'vence el']
+    .some(kw => t.includes(kw));
+  const hasOneYear = !hasExplicitExpiry && ONE_YEAR_PATTERNS.some(p => p.test(t));
 
   if (hasOneYear) {
     // Buscar la fecha de emisión — keywords comunes
@@ -186,24 +235,23 @@ function parseExpiryDate(text: string): string | null {
 
   // ── Buscar fecha explícita de vencimiento ─────────────────────────────────
   const EXPIRY_KEYWORDS = [
+    // Certificados médicos venezolanos (físicos escaneados)
+    'fecha vencimiento:', 'fecha vencimiento', 'fechavencimiento',
+    'fecha de vencimiento:', 'fecha de vencimiento',
+    // Genéricos
     'vence el', 'vence:', 'vence', 'vencimiento:', 'vencimiento',
     'válido hasta', 'valido hasta', 'vigente hasta', 'vigencia hasta',
-    'fecha de vencimiento', 'fecha vencimiento', 'expira el', 'expira:',
-    'hasta el', 'hasta:', 'vigencia:', 'vigencia hasta el',
+    'expira el', 'expira:', 'hasta el', 'hasta:', 'vigencia:', 'vigencia hasta el',
     'caduca:', 'caduca', 'caducidad:',
   ];
 
   for (const kw of EXPIRY_KEYWORDS) {
     const idx = t.indexOf(kw);
     if (idx === -1) continue;
-    const snippet = t.slice(idx + kw.length, idx + kw.length + 80);
-    for (const pat of DATE_PATTERNS) {
-      const m = snippet.match(pat);
-      if (m) {
-        const d = matchToDate(m);
-        if (d) return d;
-      }
-    }
+    // Ventana ampliada: toma la fecha MÁS TARDÍA del snippet (evita confundir fecha de emisión con vencimiento)
+    const snippet = t.slice(idx + kw.length, idx + kw.length + 120);
+    const d = findLatestDateInSnippet(snippet);
+    if (d) return d;
   }
 
   // ── Detectar rangos de período con "al" o " - " como separador ──────────────
@@ -219,14 +267,9 @@ function parseExpiryDate(text: string): string | null {
   for (const rx of RANGE_PATTERNS) {
     const rm = rx.exec(t);
     if (!rm) continue;
-    const afterSep = t.slice(rm.index + rm[0].length, rm.index + rm[0].length + 40);
-    for (const pat of DATE_PATTERNS) {
-      const m = afterSep.match(pat);
-      if (m) {
-        const d = matchToDate(m);
-        if (d) return d;
-      }
-    }
+    const afterSep = t.slice(rm.index + rm[0].length, rm.index + rm[0].length + 60);
+    const d = findLatestDateInSnippet(afterSep);
+    if (d) return d;
   }
 
   // ── Fallback: primera fecha en el documento ───────────────────────────────
@@ -291,10 +334,24 @@ async function processCompliance(): Promise<ComplianceStore[]> {
         pdfText = await ocrPdfText(buffer);
       }
 
-      // Prioridad: texto del PDF → nombre del archivo → fallback vencido
-      const expiresAt = parseExpiryDate(pdfText)
-        ?? parseDateFromFilename(file.name)
-        ?? '1970-01-01';
+      // Certificados médicos venezolanos: la firma del médico tapa el año del vencimiento
+      // en el scan. Fiabilidad 100%: se detecta por nombre de archivo → vigencia = 1 año.
+      const isMedicalCertByName = /certificado\s*medico/i.test(file.name);
+
+      let expiresAt: string;
+      if (isMedicalCertByName) {
+        const normalizedText = normalizeOcrText(pdfText);
+        const issueDate = findFirstDate(normalizedText);
+        expiresAt = issueDate
+          ? addOneYear(issueDate)
+          : (parseDateFromFilename(file.name) ?? '1970-01-01');
+        console.log(`Certificado médico "${file.name}": emisión ${issueDate ?? '?'} → vence ${expiresAt}`);
+      } else {
+        // Prioridad: texto del PDF → nombre del archivo → fallback vencido
+        expiresAt = parseExpiryDate(pdfText)
+          ?? parseDateFromFilename(file.name)
+          ?? '1970-01-01';
+      }
       const docName = parseDocName(file.name);
 
       if (!storeMap.has(storeId)) {
