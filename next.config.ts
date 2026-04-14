@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "20mb",
     },
   },
+  serverExternalPackages: ['@napi-rs/canvas', 'canvas', 'tesseract.js', '@anthropic-ai/sdk'],
 };
 
 export default nextConfig;

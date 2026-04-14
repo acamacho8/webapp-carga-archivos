@@ -1,0 +1,12 @@
+{
+  "name": "fiscal-agent-fq88",
+  "version": "0.1.0",
+  "description": "Agente local para comunicación con impresoras fiscales TFHKA en FQ88",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

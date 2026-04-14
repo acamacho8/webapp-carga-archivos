@@ -9,12 +9,14 @@ import {
   Activity, Server, LifeBuoy, RefreshCw, Trash2, FileDown, Database,
   Eye, EyeOff, Copy, CheckCircle2, Circle, AlertCircle, Wifi, WifiOff,
   Terminal as TerminalIcon, Zap, Clock, Play, XCircle, Loader2,
-  ArrowUpFromLine, ShoppingCart,
+  ArrowUpFromLine, ShoppingCart, ShieldCheck, ExternalLink, Search, ChevronDown,
 } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { useComplianceData } from '@/hooks/useComplianceData';
+import type { AlertStatus, StoreWithStatus } from '@/types/compliance';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type Tab = 'monitor' | 'infra' | 'soporte';
+type Tab = 'monitor' | 'infra' | 'soporte' | 'cumplimiento';
 type ServiceStatus = 'ok' | 'warn' | 'down';
 type TicketStatus = 'Abierto' | 'En Proceso' | 'Cerrado';
 
@@ -44,7 +46,7 @@ interface Ticket { id: number; store: string; problem: string; status: TicketSta
 const STORES: Store[] = [
   { id: 'FQ01', name: 'CC Sambil', ip: '192.168.1.10', port: 3001, printer: 'Bixolon SRP-350III', online: true },
   { id: 'FQ28', name: 'El Marqués', ip: '192.168.1.28', port: 3028, printer: 'Epson TM-T88VI', online: true },
-  { id: 'FQ88', name: 'Sambil La Candelaria', ip: '192.168.1.88', port: 3088, printer: 'Star TSP143', online: false },
+  { id: 'FQ88', name: 'Sambil La Candelaria', ip: '192.168.1.88', port: 3088, printer: 'TFHKA Fiscal', online: false },
 ];
 
 const CREDENTIALS: Credential[] = [
@@ -301,16 +303,23 @@ function TabMonitor({ setRealLogs }: { setRealLogs: React.Dispatch<React.SetStat
   }, []);
   const [jobMsg, setJobMsg] = useState<string | null>(null);
 
-  const handleRunJob = useCallback(() => {
+  const handleRunJob = useCallback(async () => {
     setJobStatus('ejecutando');
     setJobMsg(null);
-    setTimeout(() => {
-      setJobStatus('ejecutado');
+    try {
+      const res = await fetch('/api/trigger-crm', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
       const now = new Date().toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' });
       setJobLastRun(now);
-      setJobMsg('✓ CRM Automatizado ejecutado exitosamente');
-      setTimeout(() => setJobMsg(null), 4000);
-    }, 3500);
+      setJobStatus('ejecutado');
+      setJobMsg('✓ Workflow disparado — revisa GitHub Actions para el progreso');
+      setTimeout(() => setJobMsg(null), 5000);
+    } catch (err) {
+      setJobStatus('fallido');
+      setJobMsg(`✗ ${err instanceof Error ? err.message : 'Error desconocido'}`);
+      setTimeout(() => setJobMsg(null), 5000);
+    }
   }, []);
 
   useEffect(() => {
@@ -652,6 +661,15 @@ function TabMonitor({ setRealLogs }: { setRealLogs: React.Dispatch<React.SetStat
 
 // ─── Tab: Infraestructura y Tiendas ──────────────────────────────────────────
 interface PrinterLive { id: string; online: boolean; latency: number }
+interface AgentPrinter { id: number; host: string | null; configured: boolean }
+interface AgentStatus {
+  configured: boolean;
+  online: boolean;
+  error?: string;
+  agent?: string;
+  ts?: string;
+  printers?: AgentPrinter[];
+}
 
 function TabInfra() {
   const [copiedIp, setCopiedIp] = useState<string | null>(null);
@@ -659,6 +677,9 @@ function TabInfra() {
   const [printers, setPrinters] = useState<PrinterLive[]>([]);
   const [printerTs, setPrinterTs] = useState<string | null>(null);
   const [printerLoading, setPrinterLoading] = useState(true);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus | null>(null);
+  const [agentLoading, setAgentLoading] = useState(true);
+  const [agentTs, setAgentTs] = useState<string | null>(null);
 
   const fetchPrinters = useCallback(async () => {
     try {
@@ -674,11 +695,30 @@ function TabInfra() {
     }
   }, []);
 
+  const fetchAgent = useCallback(async () => {
+    try {
+      const res = await fetch('/api/agent-status');
+      const data: AgentStatus = await res.json();
+      setAgentStatus(data);
+      setAgentTs(new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch {
+      setAgentStatus({ configured: false, online: false, error: 'No se pudo contactar al servidor' });
+    } finally {
+      setAgentLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchPrinters();
     const id = setInterval(fetchPrinters, 30_000);
     return () => clearInterval(id);
   }, [fetchPrinters]);
+
+  useEffect(() => {
+    fetchAgent();
+    const id = setInterval(fetchAgent, 30_000);
+    return () => clearInterval(id);
+  }, [fetchAgent]);
 
   const handleCopy = useCallback((ip: string) => {
     navigator.clipboard.writeText(ip).catch(() => {});
@@ -765,6 +805,91 @@ function TabInfra() {
               })}
             </tbody>
           </table>
+        </Card>
+      </div>
+
+      {/* Agente Fiscal FQ88 */}
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Zap size={15} className="text-yellow-400" />
+            <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Agente Fiscal — FQ88</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {agentLoading && <Loader2 size={11} className="animate-spin text-slate-500" />}
+            {agentTs && !agentLoading && (
+              <span className="font-mono text-[10px] text-slate-600">Actualizado {agentTs}</span>
+            )}
+            <button onClick={fetchAgent} className="rounded border border-slate-700 p-1 text-slate-500 hover:text-yellow-400 transition-colors">
+              <RefreshCw size={11} />
+            </button>
+          </div>
+        </div>
+        <Card>
+          {agentLoading && !agentStatus ? (
+            <div className="flex items-center gap-2 text-slate-500">
+              <Loader2 size={13} className="animate-spin" />
+              <span className="text-xs">Comprobando agente...</span>
+            </div>
+          ) : !agentStatus?.configured ? (
+            <div className="flex items-center gap-2 text-slate-500">
+              <AlertCircle size={13} className="text-slate-600" />
+              <span className="text-xs text-slate-500">
+                Túnel no configurado —{' '}
+                <span className="font-mono text-slate-600">FISCAL_AGENT_FQ88_URL</span> no definida
+              </span>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Agent online/offline */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={twMerge(
+                    'flex h-8 w-8 items-center justify-center rounded-lg border',
+                    agentStatus.online
+                      ? 'border-emerald-800 bg-emerald-950 text-emerald-400'
+                      : 'border-red-900 bg-red-950 text-red-400'
+                  )}>
+                    {agentStatus.online ? <Wifi size={15} /> : <WifiOff size={15} />}
+                  </div>
+                  <div>
+                    <p className={twMerge('text-sm font-semibold', agentStatus.online ? 'text-emerald-400' : 'text-red-400')}>
+                      {agentStatus.online ? 'Agente Online' : 'Agente Offline'}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      {agentStatus.online
+                        ? `Túnel Cloudflare activo · fiscal-fq88`
+                        : agentStatus.error ?? 'Sin respuesta del túnel'}
+                    </p>
+                  </div>
+                </div>
+                {agentStatus.online && agentStatus.ts && (
+                  <span className="font-mono text-[10px] text-slate-600">
+                    <Clock size={9} className="mr-1 inline" />
+                    Agente: {new Date(agentStatus.ts).toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                )}
+              </div>
+
+              {/* Printers from agent */}
+              {agentStatus.online && agentStatus.printers && agentStatus.printers.length > 0 && (
+                <div className="rounded-lg border border-slate-800 bg-slate-900/60 divide-y divide-slate-800">
+                  {agentStatus.printers.map(p => (
+                    <div key={p.id} className="flex items-center justify-between px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-yellow-400">Impresora {p.id}</span>
+                        <span className="font-mono text-xs text-slate-400">{p.host ?? '—'}</span>
+                      </div>
+                      {p.configured
+                        ? <span className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-cyan-400 border border-slate-700">Configurada</span>
+                        : <span className="rounded bg-slate-900 px-2 py-0.5 font-mono text-[10px] text-slate-600 border border-slate-800">Sin IP</span>
+                      }
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       </div>
 
@@ -886,11 +1011,266 @@ function TabSoporte({ realLogs }: { realLogs: string[] }) {
   );
 }
 
+// ─── Tab: Cumplimiento Legal ──────────────────────────────────────────────────
+const ALERT_BADGE: Record<AlertStatus, { label: (days: number) => string; classes: string }> = {
+  expired:  { label: ()     => 'Vencido',  classes: 'bg-red-900/40 text-red-400 border-red-800' },
+  critical: { label: (d)    => `${d}d`,    classes: 'bg-orange-900/40 text-orange-400 border-orange-800' },
+  warning:  { label: (d)    => `${d}d`,    classes: 'bg-yellow-900/40 text-yellow-400 border-yellow-800' },
+  ok:       { label: ()     => 'Vigente',  classes: 'bg-emerald-900/40 text-emerald-400 border-emerald-800' },
+};
+
+const STORE_ACCENT: Record<AlertStatus, string> = {
+  expired:  'border-l-2 border-l-red-500',
+  critical: 'border-l-2 border-l-orange-500',
+  warning:  'border-l-2 border-l-yellow-400',
+  ok:       'border-l-2 border-l-emerald-500',
+};
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  publicidad:             'Propaganda y Publicidad',
+  permiso_sanitario:      'Permisos Sanitarios',
+  conformidad_uso:        'Conformidad de Uso',
+  registro_contribuyente: 'Registro de Contribuyente',
+  inces:                  'INCES / Capacitación',
+  impuesto:               'Impuestos',
+  patente:                'Patentes y Licencias',
+};
+
+const STATUS_LABELS: Record<AlertStatus | 'all', string> = {
+  all:      'Todos los estados',
+  expired:  'Vencidos',
+  critical: 'Críticos (≤15d)',
+  warning:  'En alerta (≤30d)',
+  ok:       'Vigentes',
+};
+
+function AlertBadge({ status, days }: { status: AlertStatus; days: number }) {
+  const cfg = ALERT_BADGE[status];
+  return (
+    <span className={twMerge('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', cfg.classes)}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {cfg.label(days)}
+    </span>
+  );
+}
+
+// ─── Fila de documento individual ────────────────────────────────────────────
+function DocRow({ doc, indent = false, categoryLabel }: { doc: import('@/types/compliance').DocumentWithStatus; indent?: boolean; categoryLabel?: string }) {
+  return (
+    <div className={twMerge('flex items-center justify-between py-2.5', indent ? 'pl-8 pr-4' : 'px-4')}>
+      <div className="flex flex-col gap-0.5 min-w-0">
+        {categoryLabel && (
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{categoryLabel}</span>
+        )}
+        <span className="text-xs text-slate-300 truncate">{doc.name}</span>
+        {doc.expires_at === '1970-01-01' ? (
+          <span className="font-mono text-[10px] text-amber-500">⚠ Fecha no encontrada</span>
+        ) : (
+          <span className="font-mono text-[10px] text-slate-500">Vence: {doc.expires_at}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0 ml-3">
+        <AlertBadge status={doc.alertStatus} days={doc.daysUntilExpiry} />
+        {doc.file_url && (
+          <a
+            href={doc.file_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 font-mono text-[10px] text-cyan-400 transition-all hover:border-cyan-600 hover:text-cyan-300"
+          >
+            <ExternalLink size={10} />
+            Drive
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Grupo colapsable de documentos con el mismo nombre ──────────────────────
+function DocGroup({ name, docs }: { name: string; docs: import('@/types/compliance').DocumentWithStatus[] }) {
+  const [open, setOpen] = useState(false);
+  const worst = docs.reduce<import('@/types/compliance').AlertStatus>((acc, d) => {
+    const pri = ['expired','critical','warning','ok'] as const;
+    return pri.indexOf(d.alertStatus) < pri.indexOf(acc) ? d.alertStatus : acc;
+  }, 'ok');
+  const minDays = Math.min(...docs.map(d => d.daysUntilExpiry));
+
+  return (
+    <div className="border-b border-slate-800/60 last:border-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-800/40 transition-colors"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <ChevronDown size={12} className={twMerge('shrink-0 text-slate-500 transition-transform', open && 'rotate-180')} />
+          <span className="text-xs text-slate-300 truncate">{name}</span>
+          <span className="shrink-0 rounded-full bg-slate-700 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+            {docs.length}
+          </span>
+        </div>
+        <AlertBadge status={worst} days={minDays} />
+      </button>
+      {open && (
+        <div className="divide-y divide-slate-800/40 bg-slate-900/40">
+          {docs.map(doc => <DocRow key={doc.id} doc={doc} indent />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ComplianceStoreCard({ store }: { store: StoreWithStatus }) {
+  // Agrupar documentos por categoría (type)
+  const groups = new Map<string, typeof store.documents>();
+  for (const doc of store.documents) {
+    const key = doc.type;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(doc);
+  }
+
+  return (
+    <Card className={twMerge('p-0 overflow-hidden', STORE_ACCENT[store.worstStatus])}>
+      {/* Store header */}
+      <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs font-bold text-yellow-400">{store.id}</span>
+          <span className="text-sm font-semibold text-slate-200">{store.name}</span>
+        </div>
+        <AlertBadge status={store.worstStatus} days={
+          Math.min(...store.documents.map(d => d.daysUntilExpiry))
+        } />
+      </div>
+      {/* Document list — agrupado por categoría; colapsable si hay más de 1 */}
+      <div className="divide-y divide-slate-800/60">
+        {Array.from(groups.entries()).map(([type, docs]) => {
+          const label = DOC_TYPE_LABELS[type] ?? type;
+          return docs.length > 1
+            ? <DocGroup key={type} name={label} docs={docs} />
+            : <DocRow key={docs[0].id} doc={docs[0]} categoryLabel={label} />;
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function TabCumplimiento() {
+  const {
+    loading, error, searchQuery, setSearchQuery,
+    statusFilter, setStatusFilter, filteredStores, stores, refresh,
+  } = useComplianceData();
+
+  const counts = stores.reduce(
+    (acc, s) => { s.documents.forEach(d => { acc[d.alertStatus]++; }); return acc; },
+    { expired: 0, critical: 0, warning: 0, ok: 0 } as Record<AlertStatus, number>
+  );
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={15} className="text-cyan-400" />
+          <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Permisología y Pagos</span>
+        </div>
+        <button onClick={refresh} className="rounded border border-slate-700 p-1 text-slate-500 hover:text-cyan-400 transition-colors">
+          <RefreshCw size={11} />
+        </button>
+      </div>
+
+      {/* Summary chips */}
+      {!loading && !error && (
+        <div className="flex flex-wrap gap-2">
+          {(Object.entries(counts) as [AlertStatus, number][]).map(([status, count]) => (
+            <button
+              key={status}
+              onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
+              className={twMerge(
+                'flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold transition-all',
+                ALERT_BADGE[status].classes,
+                statusFilter === status && 'ring-1 ring-offset-1 ring-offset-[#020617] ring-current'
+              )}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              {count} {STATUS_LABELS[status]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Filters bar */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Buscar tienda…"
+            className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2 pl-8 pr-3 text-sm text-slate-300 placeholder-slate-600 focus:border-cyan-600 focus:outline-none"
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value as AlertStatus | 'all')}
+          className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-300 focus:border-cyan-600 focus:outline-none"
+        >
+          {(Object.entries(STATUS_LABELS) as [AlertStatus | 'all', string][]).map(([v, l]) => (
+            <option key={v} value={v}>{l}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Loading skeleton */}
+      {loading && (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="animate-pulse rounded-xl border border-slate-800 bg-[#0f172a] p-4">
+              <div className="mb-3 flex items-center gap-3">
+                <div className="h-4 w-12 rounded bg-slate-800" />
+                <div className="h-4 w-32 rounded bg-slate-800" />
+              </div>
+              {[1, 2, 3].map(j => (
+                <div key={j} className="mb-2 flex items-center justify-between">
+                  <div className="h-3 w-40 rounded bg-slate-800" />
+                  <div className="h-5 w-16 rounded-full bg-slate-800" />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && (
+        <Card className="flex items-center gap-3">
+          <AlertCircle size={15} className="text-red-400 shrink-0" />
+          <span className="text-sm text-slate-400">{error}</span>
+          <button onClick={refresh} className="ml-auto text-xs text-cyan-400 hover:underline">Reintentar</button>
+        </Card>
+      )}
+
+      {/* Empty state */}
+      {!loading && !error && filteredStores.length === 0 && (
+        <Card className="text-center py-8">
+          <p className="text-sm text-slate-500">No se encontraron tiendas con ese filtro.</p>
+        </Card>
+      )}
+
+      {/* Store cards */}
+      {!loading && !error && filteredStores.map(store => (
+        <ComplianceStoreCard key={store.id} store={store} />
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
   { id: 'monitor', label: 'Monitor En Vivo', Icon: Activity },
   { id: 'infra', label: 'Infraestructura', Icon: Server },
   { id: 'soporte', label: 'Centro de Soporte', Icon: LifeBuoy },
+  { id: 'cumplimiento', label: 'Cumplimiento', Icon: ShieldCheck },
 ];
 
 export default function TechCenter() {
@@ -954,6 +1334,7 @@ export default function TechCenter() {
           {activeTab === 'monitor' && <TabMonitor setRealLogs={setRealLogs} />}
           {activeTab === 'infra' && <TabInfra />}
           {activeTab === 'soporte' && <TabSoporte realLogs={realLogs} />}
+          {activeTab === 'cumplimiento' && <TabCumplimiento />}
         </motion.div>
       </AnimatePresence>
     </div>
