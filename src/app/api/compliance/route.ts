@@ -3,6 +3,7 @@ import { processCompliance } from '@/lib/compliance-processor';
 import type { ComplianceStore } from '@/types/compliance';
 
 export const runtime = 'nodejs';
+export const maxDuration = 60; // Vercel Hobby máximo
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hora
 let cache: { data: ComplianceStore[]; ts: number } | null = null;
