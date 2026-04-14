@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/compliance-review",
-      "schedule": "0 12 * * *"
-    }
-  ]
-}
