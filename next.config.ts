@@ -7,6 +7,12 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "20mb",
     },
   },
+  serverExternalPackages: [
+    '@napi-rs/canvas',
+    'canvas',
+    'tesseract.js',
+    'unpdf',
+  ],
 };
 
 export default nextConfig;
