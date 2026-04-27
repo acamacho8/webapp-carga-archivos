@@ -89,7 +89,7 @@ export default function Home() {
     const diaNum = String(folder.dia).padStart(2, "0");
     const tiendaFolder = TIENDA_FOLDER[folder.tienda] ?? folder.tienda;
     const folderPath = folder.mode === 'cumplimiento'
-      ? `Cumplimiento FQ/${folder.tienda}/${folder.tipoDocumento.trim()}`
+      ? `Cumplimiento FQ/${folder.tienda}`
       : `${tiendaFolder}/${mesNum} - ${folder.mes}/${diaNum}`;
 
     try {
