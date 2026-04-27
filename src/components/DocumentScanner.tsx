@@ -67,23 +67,10 @@ export default function DocumentScanner({ onCapture, onClose }: Props) {
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d")!;
 
-    // Step 1: draw grayscale frame
-    ctx.filter = "grayscale(1)";
+    // Grayscale + contrast boost — preserves signatures, stamps and grays
+    ctx.filter = "grayscale(1) contrast(1.5) brightness(1.08)";
     ctx.drawImage(video, 0, 0);
     ctx.filter = "none";
-
-    // Step 2: threshold — fondo blanco, texto negro (estilo CamScanner)
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    const threshold = 100;
-    for (let i = 0; i < data.length; i += 4) {
-      const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-      const value = avg > threshold ? 255 : 0;
-      data[i]     = value; // R
-      data[i + 1] = value; // G
-      data[i + 2] = value; // B
-    }
-    ctx.putImageData(imageData, 0, 0);
 
     setPreview(canvas.toDataURL("image/jpeg", 0.92));
     setStatus("preview");
