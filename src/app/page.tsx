@@ -20,6 +20,8 @@ function todayFolder(): FolderSelection {
     tienda: "FQ01",
     mes: MESES_INDEX[now.getMonth()],
     dia: now.getDate(),
+    mode: 'reporte',
+    tipoDocumento: '',
   };
 }
 
@@ -56,6 +58,12 @@ export default function Home() {
     const diaNum = String(folder.dia).padStart(2, "0");
     const year = new Date().getFullYear();
     const dateTag = `${year}_${mesNum}_${diaNum}`;
+    if (folder.mode === 'cumplimiento') {
+      const tipoSlug = folder.tipoDocumento.trim().replace(/\s+/g, '_');
+      return customName.trim()
+        ? `${customName.trim().replace(/\.pdf$/i, "")}_${dateTag}`
+        : `${tipoSlug}_${folder.tienda}_${dateTag}`;
+    }
     return customName.trim()
       ? `${customName.trim().replace(/\.pdf$/i, "")}_${dateTag}`
       : `reporte_${folder.tienda}_${dateTag}`;
@@ -80,7 +88,9 @@ export default function Home() {
     const mesNum = String(MESES_INDEX.indexOf(folder.mes) + 1).padStart(2, "0");
     const diaNum = String(folder.dia).padStart(2, "0");
     const tiendaFolder = TIENDA_FOLDER[folder.tienda] ?? folder.tienda;
-    const folderPath = `${tiendaFolder}/${mesNum} - ${folder.mes}/${diaNum}`;
+    const folderPath = folder.mode === 'cumplimiento'
+      ? `Cumplimiento FQ/${folder.tienda}/${folder.tipoDocumento.trim()}`
+      : `${tiendaFolder}/${mesNum} - ${folder.mes}/${diaNum}`;
 
     try {
       const links: string[] = [];
@@ -165,7 +175,10 @@ export default function Home() {
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <p className="text-xs text-gray-500 font-mono bg-gray-50 px-3 py-1.5 rounded-lg">
-                📁 {folder.tienda} / {folder.mes} / {String(folder.dia).padStart(2, "0")}
+                {folder.mode === 'cumplimiento'
+                  ? `📁 Cumplimiento FQ / ${folder.tienda} / ${folder.tipoDocumento}`
+                  : `📁 ${folder.tienda} / ${folder.mes} / ${String(folder.dia).padStart(2, "0")}`
+                }
               </p>
               <button onClick={() => setStep("folder")} className="text-xs text-blue-500 hover:underline">
                 Cambiar
@@ -323,7 +336,12 @@ export default function Home() {
         {step === "uploading" && (
           <div className="flex flex-col items-center gap-4 py-8">
             <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-600 text-sm">Subiendo a {folder.tienda} / {folder.mes} / {folder.dia}...</p>
+            <p className="text-gray-600 text-sm">
+            {folder.mode === 'cumplimiento'
+              ? `Subiendo a Cumplimiento FQ / ${folder.tienda} / ${folder.tipoDocumento}...`
+              : `Subiendo a ${folder.tienda} / ${folder.mes} / ${folder.dia}...`
+            }
+          </p>
           </div>
         )}
 
@@ -339,7 +357,12 @@ export default function Home() {
               <p className="font-semibold text-gray-900">
                 {driveLinks.length === 1 ? "¡Subido exitosamente!" : `¡${driveLinks.length} PDFs subidos!`}
               </p>
-              <p className="text-gray-500 text-xs mt-1 font-mono">📁 {folder.tienda} / {folder.mes} / {folder.dia}</p>
+              <p className="text-gray-500 text-xs mt-1 font-mono">
+                {folder.mode === 'cumplimiento'
+                  ? `📁 Cumplimiento FQ / ${folder.tienda} / ${folder.tipoDocumento}`
+                  : `📁 ${folder.tienda} / ${folder.mes} / ${folder.dia}`
+                }
+              </p>
             </div>
             <div className="w-full flex flex-col gap-2">
               {driveLinks.map((link, i) => (
