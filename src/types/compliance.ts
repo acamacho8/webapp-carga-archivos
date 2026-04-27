@@ -15,6 +15,7 @@ export interface ComplianceDocument {
   expires_at: string;
   type?: DocumentType;
   file_url?: string;
+  folder?: string; // nombre de la sub-carpeta de Drive ('' = raíz de tienda)
 }
 
 export interface ComplianceStore {

@@ -1162,7 +1162,7 @@ function DocRow({ doc, indent = false, categoryLabel }: { doc: import('@/types/c
   );
 }
 
-function DocGroup({ name, docs }: { name: string; docs: import('@/types/compliance').DocumentWithStatus[] }) {
+function DocGroup({ name, docs, showTypeLabel = false }: { name: string; docs: import('@/types/compliance').DocumentWithStatus[]; showTypeLabel?: boolean }) {
   const [open, setOpen] = useState(false);
   const worst = docs.reduce<import('@/types/compliance').AlertStatus>((acc, d) => {
     const pri = ['expired','critical','warning','ok'] as const;
@@ -1182,7 +1182,14 @@ function DocGroup({ name, docs }: { name: string; docs: import('@/types/complian
       </button>
       {open && (
         <div className="divide-y divide-slate-800/40 bg-slate-900/40">
-          {docs.map(doc => <DocRow key={doc.id} doc={doc} indent />)}
+          {docs.map(doc => (
+            <DocRow
+              key={doc.id}
+              doc={doc}
+              indent
+              categoryLabel={showTypeLabel ? (DOC_TYPE_LABELS[doc.type ?? 'patente'] ?? doc.type) : undefined}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -1190,12 +1197,21 @@ function DocGroup({ name, docs }: { name: string; docs: import('@/types/complian
 }
 
 function ComplianceStoreCard({ store }: { store: StoreWithStatus }) {
-  const groups = new Map<string, typeof store.documents>();
+  // Agrupar por sub-carpeta de Drive (folder = '' significa raíz de tienda)
+  const folderMap = new Map<string, typeof store.documents>();
   for (const doc of store.documents) {
-    const key = doc.type ?? 'patente';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(doc);
+    const key = doc.folder ?? '';
+    if (!folderMap.has(key)) folderMap.set(key, []);
+    folderMap.get(key)!.push(doc);
   }
+
+  // Sub-carpetas nombradas primero (orden alfabético), luego la raíz
+  const sorted = Array.from(folderMap.entries()).sort(([a], [b]) => {
+    if (a === '' && b !== '') return 1;
+    if (a !== '' && b === '') return -1;
+    return a.localeCompare(b, 'es');
+  });
+
   return (
     <Card className={twMerge('p-0 overflow-hidden', STORE_ACCENT[store.worstStatus])}>
       <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
@@ -1206,11 +1222,11 @@ function ComplianceStoreCard({ store }: { store: StoreWithStatus }) {
         <AlertBadge status={store.worstStatus} days={Math.min(...store.documents.map(d => d.daysUntilExpiry))} />
       </div>
       <div className="divide-y divide-slate-800/60">
-        {Array.from(groups.entries()).map(([type, docs]) => {
-          const label = DOC_TYPE_LABELS[type] ?? type;
+        {sorted.map(([folder, docs]) => {
+          const label = folder || 'Documentos Generales';
           return docs.length > 1
-            ? <DocGroup key={type} name={label} docs={docs} />
-            : <DocRow key={docs[0].id} doc={docs[0]} categoryLabel={label} />;
+            ? <DocGroup key={folder} name={label} docs={docs} showTypeLabel />
+            : <DocRow key={docs[0].id} doc={docs[0]} categoryLabel={folder ? label : (DOC_TYPE_LABELS[docs[0].type ?? 'patente'] ?? docs[0].type)} />;
         })}
       </div>
     </Card>
