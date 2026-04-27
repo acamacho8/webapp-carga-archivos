@@ -9,12 +9,15 @@ import {
   Activity, Server, LifeBuoy, RefreshCw, Trash2, FileDown, Database,
   Eye, EyeOff, Copy, CheckCircle2, Circle, AlertCircle, Wifi, WifiOff,
   Terminal as TerminalIcon, Zap, Clock, Play, XCircle, Loader2,
-  ArrowUpFromLine, ShoppingCart,
+  ArrowUpFromLine, ShoppingCart, Users, TrendingUp, TrendingDown,
+  ShieldCheck, ExternalLink, Search, ChevronDown, Timer,
 } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { useComplianceData } from '@/hooks/useComplianceData';
+import type { AlertStatus, StoreWithStatus } from '@/types/compliance';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type Tab = 'monitor' | 'infra' | 'soporte';
+type Tab = 'monitor' | 'infra' | 'soporte' | 'cumplimiento';
 type ServiceStatus = 'ok' | 'warn' | 'down';
 type TicketStatus = 'Abierto' | 'En Proceso' | 'Cerrado';
 
@@ -284,6 +287,68 @@ function TabMonitor({ setRealLogs }: { setRealLogs: React.Dispatch<React.SetStat
       fetchSyncStatus().then(() => setSyncingId(null));
     }, 1500);
   }, [fetchSyncStatus]);
+
+  // FootfallCam — visitor counters
+  interface FootfallSite { name: string; in: number; out: number; net: number }
+  const [footfallSites, setFootfallSites] = useState<FootfallSite[]>([]);
+  const [footfallLoading, setFootfallLoading] = useState(true);
+  const [footfallError, setFootfallError] = useState(false);
+  const [footfallTs, setFootfallTs] = useState<string | null>(null);
+
+  const fetchFootfall = useCallback(async () => {
+    try {
+      const res = await fetch('/api/footfall');
+      if (!res.ok) { setFootfallError(true); return; }
+      const data = await res.json();
+      if (data.error) { setFootfallError(true); return; }
+      setFootfallSites(data.sites ?? []);
+      setFootfallError(false);
+      setFootfallTs(new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch {
+      setFootfallError(true);
+    } finally {
+      setFootfallLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFootfall();
+    const id = setInterval(fetchFootfall, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [fetchFootfall]);
+
+  // FootfallCam — queue counting
+  interface QueueArea {
+    site: string; area: string;
+    served: number; queueAvg: number;
+    waitAvgSec: number; waitMaxSec: number; serviceAvgSec: number;
+  }
+  const [queueAreas, setQueueAreas] = useState<QueueArea[]>([]);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState(false);
+  const [queueTs, setQueueTs] = useState<string | null>(null);
+
+  const fetchQueue = useCallback(async () => {
+    try {
+      const res = await fetch('/api/footfall/queue');
+      if (!res.ok) { setQueueError(true); return; }
+      const data = await res.json();
+      if (data.error) { setQueueError(true); return; }
+      setQueueAreas(data.areas ?? []);
+      setQueueError(false);
+      setQueueTs(new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch {
+      setQueueError(true);
+    } finally {
+      setQueueLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchQueue();
+    const id = setInterval(fetchQueue, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [fetchQueue]);
 
   // CRM nightly job (scheduled 10:00 PM)
   type JobStatus = 'ejecutado' | 'fallido' | 'en_espera' | 'ejecutando';
@@ -569,6 +634,147 @@ function TabMonitor({ setRealLogs }: { setRealLogs: React.Dispatch<React.SetStat
             );
           })}
         </div>
+      </div>
+
+      {/* FootfallCam */}
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users size={15} className="text-cyan-400" />
+            <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">FootfallCam — Contadores de Afluencia</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {footfallLoading && <Loader2 size={11} className="animate-spin text-slate-500" />}
+            {footfallError && !footfallLoading && (
+              <span className="rounded-full border border-red-700 bg-red-900/30 px-2 py-0.5 font-mono text-[10px] text-red-400">Sin conexión</span>
+            )}
+            {footfallTs && !footfallLoading && !footfallError && (
+              <span className="font-mono text-[10px] text-slate-600">Actualizado {footfallTs}</span>
+            )}
+            <button onClick={fetchFootfall} className="rounded border border-slate-700 p-1 text-slate-500 hover:text-cyan-400 transition-colors">
+              <RefreshCw size={11} />
+            </button>
+          </div>
+        </div>
+
+        {footfallLoading ? (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[0, 1, 2].map(i => (
+              <Card key={i} className="animate-pulse space-y-3">
+                <div className="h-3 w-2/3 rounded bg-slate-800" />
+                <div className="h-8 w-1/2 rounded bg-slate-800" />
+                <div className="h-3 w-1/3 rounded bg-slate-800" />
+              </Card>
+            ))}
+          </div>
+        ) : footfallError || footfallSites.length === 0 ? (
+          <Card className="flex items-center justify-center py-6 text-sm text-slate-600">
+            {footfallError ? 'Error al conectar con FootfallCam' : 'Sin datos de afluencia para hoy'}
+          </Card>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {footfallSites.map(site => (
+              <Card key={site.name} className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-300">{site.name}</span>
+                  <span className="rounded-full border border-cyan-800 bg-cyan-900/30 px-2 py-0.5 font-mono text-[9px] text-cyan-400">HOY</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
+                  <div>
+                    <div className="flex items-center gap-1 text-[10px] text-slate-500 uppercase tracking-wide">
+                      <TrendingUp size={9} className="text-cyan-400" />Entradas
+                    </div>
+                    <div className="font-mono text-lg font-bold text-cyan-300">{site.in > 0 ? site.in.toLocaleString() : '—'}</div>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1 text-[10px] text-slate-500 uppercase tracking-wide">
+                      <TrendingDown size={9} className="text-slate-400" />Salidas
+                    </div>
+                    <div className="font-mono text-lg font-bold text-slate-300">{site.out > 0 ? site.out.toLocaleString() : '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 uppercase tracking-wide">Neto</div>
+                    <div className={`font-mono text-base font-bold ${site.net > 0 ? 'text-emerald-400' : site.net < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                      {site.net !== 0 ? (site.net > 0 ? '+' : '') + site.net.toLocaleString() : '—'}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* FootfallCam — Conteo de Colas */}
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Timer size={15} className="text-amber-400" />
+            <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">FootfallCam — Conteo de Colas</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {queueLoading && <Loader2 size={11} className="animate-spin text-slate-500" />}
+            {queueError && !queueLoading && (
+              <span className="rounded-full border border-red-700 bg-red-900/30 px-2 py-0.5 font-mono text-[10px] text-red-400">Sin conexión</span>
+            )}
+            {queueTs && !queueLoading && !queueError && (
+              <span className="font-mono text-[10px] text-slate-600">Actualizado {queueTs}</span>
+            )}
+            <button onClick={fetchQueue} className="rounded border border-slate-700 p-1 text-slate-500 hover:text-amber-400 transition-colors">
+              <RefreshCw size={11} />
+            </button>
+          </div>
+        </div>
+
+        {queueLoading ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[0, 1].map(i => (
+              <Card key={i} className="animate-pulse space-y-3">
+                <div className="h-3 w-24 rounded bg-slate-800" />
+                <div className="h-8 w-16 rounded bg-slate-800" />
+              </Card>
+            ))}
+          </div>
+        ) : queueError || queueAreas.length === 0 ? (
+          <Card className="flex items-center justify-center py-6 text-sm text-slate-600">
+            {queueError ? 'Error al conectar con FootfallCam' : 'Sin datos de cola para hoy'}
+          </Card>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {queueAreas.map(area => {
+              const fmtSec = (s: number) => s === 0 ? '—' : s < 60 ? `${Math.round(s)}s` : `${Math.floor(s/60)}m ${Math.round(s%60)}s`;
+              return (
+                <Card key={area.area} className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-semibold text-slate-300">{area.area}</div>
+                      <div className="text-[10px] text-slate-600">{area.site}</div>
+                    </div>
+                    <span className="rounded-full border border-amber-800 bg-amber-900/30 px-2 py-0.5 font-mono text-[9px] text-amber-400">HOY</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2 sm:grid-cols-4">
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase tracking-wide">Atendidos</div>
+                      <div className="font-mono text-lg font-bold text-amber-300">{area.served > 0 ? area.served : '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase tracking-wide">T. Servicio</div>
+                      <div className="font-mono text-base font-bold text-slate-300">{fmtSec(area.serviceAvgSec)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase tracking-wide">Espera prom.</div>
+                      <div className="font-mono text-base font-bold text-slate-300">{fmtSec(area.waitAvgSec)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase tracking-wide">Espera máx.</div>
+                      <div className="font-mono text-base font-bold text-slate-400">{fmtSec(area.waitMaxSec)}</div>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* CRM Nightly Job */}
@@ -886,11 +1092,206 @@ function TabSoporte({ realLogs }: { realLogs: string[] }) {
   );
 }
 
+// ─── Tab: Cumplimiento Legal ──────────────────────────────────────────────────
+const ALERT_BADGE: Record<AlertStatus, { label: (days: number) => string; classes: string }> = {
+  expired:  { label: ()  => 'Vencido', classes: 'bg-red-900/40 text-red-400 border-red-800' },
+  critical: { label: (d) => `${d}d`,   classes: 'bg-orange-900/40 text-orange-400 border-orange-800' },
+  warning:  { label: (d) => `${d}d`,   classes: 'bg-yellow-900/40 text-yellow-400 border-yellow-800' },
+  ok:       { label: ()  => 'Vigente', classes: 'bg-emerald-900/40 text-emerald-400 border-emerald-800' },
+};
+
+const STORE_ACCENT: Record<AlertStatus, string> = {
+  expired:  'border-l-2 border-l-red-500',
+  critical: 'border-l-2 border-l-orange-500',
+  warning:  'border-l-2 border-l-yellow-400',
+  ok:       'border-l-2 border-l-emerald-500',
+};
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  publicidad:             'Propaganda y Publicidad',
+  permiso_sanitario:      'Permisos Sanitarios',
+  conformidad_uso:        'Conformidad de Uso',
+  registro_contribuyente: 'Registro de Contribuyente',
+  inces:                  'INCES / Capacitación',
+  impuesto:               'Impuestos',
+  patente:                'Patentes y Licencias',
+};
+
+const STATUS_LABELS: Record<AlertStatus | 'all', string> = {
+  all:      'Todos los estados',
+  expired:  'Vencidos',
+  critical: 'Críticos (≤15d)',
+  warning:  'En alerta (≤30d)',
+  ok:       'Vigentes',
+};
+
+function AlertBadge({ status, days }: { status: AlertStatus; days: number }) {
+  const cfg = ALERT_BADGE[status];
+  return (
+    <span className={twMerge('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', cfg.classes)}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {cfg.label(days)}
+    </span>
+  );
+}
+
+function DocRow({ doc, indent = false, categoryLabel }: { doc: import('@/types/compliance').DocumentWithStatus; indent?: boolean; categoryLabel?: string }) {
+  return (
+    <div className={twMerge('flex items-center justify-between py-2.5', indent ? 'pl-8 pr-4' : 'px-4')}>
+      <div className="flex flex-col gap-0.5 min-w-0">
+        {categoryLabel && (
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{categoryLabel}</span>
+        )}
+        <span className="text-xs text-slate-300 truncate">{doc.name}</span>
+        {doc.expires_at === '1970-01-01' ? (
+          <span className="font-mono text-[10px] text-amber-500">⚠ Fecha no encontrada</span>
+        ) : (
+          <span className="font-mono text-[10px] text-slate-500">Vence: {doc.expires_at}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0 ml-3">
+        <AlertBadge status={doc.alertStatus} days={doc.daysUntilExpiry} />
+        {doc.file_url && (
+          <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 font-mono text-[10px] text-cyan-400 transition-all hover:border-cyan-600 hover:text-cyan-300">
+            <ExternalLink size={10} />Drive
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DocGroup({ name, docs }: { name: string; docs: import('@/types/compliance').DocumentWithStatus[] }) {
+  const [open, setOpen] = useState(false);
+  const worst = docs.reduce<import('@/types/compliance').AlertStatus>((acc, d) => {
+    const pri = ['expired','critical','warning','ok'] as const;
+    return pri.indexOf(d.alertStatus) < pri.indexOf(acc) ? d.alertStatus : acc;
+  }, 'ok');
+  const minDays = Math.min(...docs.map(d => d.daysUntilExpiry));
+  return (
+    <div className="border-b border-slate-800/60 last:border-0">
+      <button onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left hover:bg-slate-800/40 transition-colors">
+        <div className="flex items-center gap-2 min-w-0">
+          <ChevronDown size={12} className={twMerge('shrink-0 text-slate-500 transition-transform', open && 'rotate-180')} />
+          <span className="text-xs text-slate-300 truncate">{name}</span>
+          <span className="shrink-0 rounded-full bg-slate-700 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">{docs.length}</span>
+        </div>
+        <AlertBadge status={worst} days={minDays} />
+      </button>
+      {open && (
+        <div className="divide-y divide-slate-800/40 bg-slate-900/40">
+          {docs.map(doc => <DocRow key={doc.id} doc={doc} indent />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ComplianceStoreCard({ store }: { store: StoreWithStatus }) {
+  const groups = new Map<string, typeof store.documents>();
+  for (const doc of store.documents) {
+    const key = doc.type ?? 'patente';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(doc);
+  }
+  return (
+    <Card className={twMerge('p-0 overflow-hidden', STORE_ACCENT[store.worstStatus])}>
+      <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs font-bold text-yellow-400">{store.id}</span>
+          <span className="text-sm font-semibold text-slate-200">{store.name}</span>
+        </div>
+        <AlertBadge status={store.worstStatus} days={Math.min(...store.documents.map(d => d.daysUntilExpiry))} />
+      </div>
+      <div className="divide-y divide-slate-800/60">
+        {Array.from(groups.entries()).map(([type, docs]) => {
+          const label = DOC_TYPE_LABELS[type] ?? type;
+          return docs.length > 1
+            ? <DocGroup key={type} name={label} docs={docs} />
+            : <DocRow key={docs[0].id} doc={docs[0]} categoryLabel={label} />;
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function TabCumplimiento() {
+  const { loading, error, searchQuery, setSearchQuery, statusFilter, setStatusFilter, filteredStores, stores, refresh } = useComplianceData();
+  const counts = stores.reduce(
+    (acc, s) => { s.documents.forEach(d => { acc[d.alertStatus]++; }); return acc; },
+    { expired: 0, critical: 0, warning: 0, ok: 0 } as Record<AlertStatus, number>
+  );
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={15} className="text-cyan-400" />
+          <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">Permisología y Pagos</span>
+        </div>
+        <button onClick={refresh} className="rounded border border-slate-700 p-1 text-slate-500 hover:text-cyan-400 transition-colors">
+          <RefreshCw size={11} />
+        </button>
+      </div>
+      {!loading && !error && (
+        <div className="flex flex-wrap gap-2">
+          {(Object.entries(counts) as [AlertStatus, number][]).map(([status, count]) => (
+            <button key={status} onClick={() => setStatusFilter(statusFilter === status ? 'all' : status)}
+              className={twMerge('flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold transition-all', ALERT_BADGE[status].classes, statusFilter === status && 'ring-1 ring-offset-1 ring-offset-[#020617] ring-current')}>
+              <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              {count} {STATUS_LABELS[status]}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Buscar tienda…"
+            className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2 pl-8 pr-3 text-sm text-slate-300 placeholder-slate-600 focus:border-cyan-600 focus:outline-none" />
+        </div>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as AlertStatus | 'all')}
+          className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-300 focus:border-cyan-600 focus:outline-none">
+          {(Object.entries(STATUS_LABELS) as [AlertStatus | 'all', string][]).map(([v, l]) => (
+            <option key={v} value={v}>{l}</option>
+          ))}
+        </select>
+      </div>
+      {loading && (
+        <div className="space-y-3">
+          {[1,2,3].map(i => (
+            <div key={i} className="animate-pulse rounded-xl border border-slate-800 bg-[#0f172a] p-4">
+              <div className="mb-3 flex items-center gap-3"><div className="h-4 w-12 rounded bg-slate-800" /><div className="h-4 w-32 rounded bg-slate-800" /></div>
+              {[1,2,3].map(j => (<div key={j} className="mb-2 flex items-center justify-between"><div className="h-3 w-40 rounded bg-slate-800" /><div className="h-5 w-16 rounded-full bg-slate-800" /></div>))}
+            </div>
+          ))}
+        </div>
+      )}
+      {error && (
+        <Card className="flex items-center gap-3">
+          <AlertCircle size={15} className="text-red-400 shrink-0" />
+          <span className="text-sm text-slate-400">{error}</span>
+          <button onClick={refresh} className="ml-auto text-xs text-cyan-400 hover:underline">Reintentar</button>
+        </Card>
+      )}
+      {!loading && !error && filteredStores.length === 0 && (
+        <Card className="text-center py-8"><p className="text-sm text-slate-500">No se encontraron tiendas con ese filtro.</p></Card>
+      )}
+      {!loading && !error && filteredStores.map(store => (
+        <ComplianceStoreCard key={store.id} store={store} />
+      ))}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
   { id: 'monitor', label: 'Monitor En Vivo', Icon: Activity },
   { id: 'infra', label: 'Infraestructura', Icon: Server },
   { id: 'soporte', label: 'Centro de Soporte', Icon: LifeBuoy },
+  { id: 'cumplimiento', label: 'Cumplimiento', Icon: ShieldCheck },
 ];
 
 export default function TechCenter() {
@@ -954,6 +1355,7 @@ export default function TechCenter() {
           {activeTab === 'monitor' && <TabMonitor setRealLogs={setRealLogs} />}
           {activeTab === 'infra' && <TabInfra />}
           {activeTab === 'soporte' && <TabSoporte realLogs={realLogs} />}
+          {activeTab === 'cumplimiento' && <TabCumplimiento />}
         </motion.div>
       </AnimatePresence>
     </div>
