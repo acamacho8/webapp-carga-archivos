@@ -673,7 +673,7 @@ function TabMonitor({ setRealLogs }: { setRealLogs: React.Dispatch<React.SetStat
           </Card>
         ) : (
           <div className="grid gap-3 sm:grid-cols-3">
-            {footfallSites.map(site => (
+            {footfallSites.filter(site => site.in > 0 || site.out > 0).map(site => (
               <Card key={site.name} className="flex flex-col gap-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-300">{site.name}</span>
