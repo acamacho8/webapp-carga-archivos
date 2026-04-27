@@ -89,6 +89,9 @@ const MONTHS: Record<string, string> = {
   ene: '01', feb: '02', mar: '03', abr: '04',
   may: '05', jun: '06', jul: '07', ago: '08',
   sep: '09', set: '09', oct: '10', nov: '11', dic: '12',
+  // Variantes con 0 en vez de O (confusión OCR en escaneos de baja calidad)
+  n0v: '11', 'n0viembre': '11', '0ct': '10', 'ag0': '08',
+  'juni0': '06', 'juli0': '07', 'febrer0': '02', 'marz0': '03',
 };
 
 const MONTH_NAMES = Object.keys(MONTHS).join('|');
@@ -258,10 +261,24 @@ async function processPdf(file: GasFile): Promise<CachedDoc | null> {
     pdfText = await ocrPdfText(buffer);
   }
 
-  const isMedicalCert = /certificado\s*medico/i.test(file.name);
+  // Detectar cert. médico por nombre O por contenido (keywords del formato venezolano)
+  // Lista ampliada para tolerar errores de OCR en escaneos de baja calidad
+  const normalizedForDetect = normalizeOcrText(pdfText);
+  const medicalKeywords = [
+    'serologia', 'hepatitis b', 'hepatit',          // "HEPATITIS B" a veces leído como "HEPATMSB"
+    'toxoide tetanico', 'toxoide',
+    'vacunas recibidas', 'vacunas',
+    'tension ocular', 'tension arterial', 'ocular', // "TENSION ARTERIAL" siempre visible
+    'valido por', 'válido por',                      // "Este certificado es válido por 1 año"
+    'fecha de las dosis', 'dosis',
+  ];
+  const isMedicalCert =
+    /certificado\s*medico/i.test(file.name) ||
+    medicalKeywords.filter(kw => normalizedForDetect.includes(kw)).length >= 2;
+
   let expiresAt: string;
   if (isMedicalCert) {
-    const issueDate = findFirstDate(normalizeOcrText(pdfText));
+    const issueDate = findFirstDate(normalizedForDetect);
     expiresAt = issueDate ? addOneYear(issueDate) : (parseDateFromFilename(file.name) ?? '1970-01-01');
   } else {
     expiresAt = parseExpiryDate(pdfText) ?? parseDateFromFilename(file.name) ?? '1970-01-01';
