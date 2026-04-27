@@ -16,15 +16,28 @@ export async function uploadPdfToDrive(
     redirect: "follow",
   });
 
-  if (!res.ok) throw new Error(`GAS error: ${res.status}`);
-
-  // GAS returns plain text or JSON — handle both
   const text = await res.text();
-  let viewLink = text;
+
+  if (!res.ok) throw new Error(`GAS error ${res.status}: ${text.slice(0, 200)}`);
+
+  // GAS returns plain text URL or JSON — handle both
+  let viewLink: string = text.trim();
   try {
     const json = JSON.parse(text);
-    viewLink = json.viewLink ?? json.url ?? text;
-  } catch {}
+    // Surface GAS-level errors returned with status 200
+    if (json.error) throw new Error(`GAS: ${json.error}`);
+    viewLink = json.viewLink ?? json.url ?? json.link ?? text.trim();
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      // Not JSON — use raw text as URL
+    } else {
+      throw e;
+    }
+  }
+
+  if (!viewLink.startsWith("https://")) {
+    throw new Error(`GAS devolvió respuesta inesperada: ${viewLink.slice(0, 200)}`);
+  }
 
   return { viewLink };
 }
