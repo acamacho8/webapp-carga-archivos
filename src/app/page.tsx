@@ -59,10 +59,7 @@ export default function Home() {
     const year = new Date().getFullYear();
     const dateTag = `${year}_${mesNum}_${diaNum}`;
     if (folder.mode === 'cumplimiento') {
-      const tipoSlug = folder.tipoDocumento.trim().replace(/\s+/g, '_');
-      return customName.trim()
-        ? `${customName.trim().replace(/\.pdf$/i, "")}_${dateTag}`
-        : `${tipoSlug}_${folder.tienda}_${dateTag}`;
+      return folder.tipoDocumento.trim().replace(/\.pdf$/i, "");
     }
     return customName.trim()
       ? `${customName.trim().replace(/\.pdf$/i, "")}_${dateTag}`
