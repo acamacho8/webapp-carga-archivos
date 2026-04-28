@@ -1094,10 +1094,11 @@ function TabSoporte({ realLogs }: { realLogs: string[] }) {
 
 // ─── Tab: Cumplimiento Legal ──────────────────────────────────────────────────
 const ALERT_BADGE: Record<AlertStatus, { label: (days: number) => string; classes: string }> = {
-  expired:  { label: ()  => 'Vencido', classes: 'bg-red-900/40 text-red-400 border-red-800' },
-  critical: { label: (d) => `${d}d`,   classes: 'bg-orange-900/40 text-orange-400 border-orange-800' },
-  warning:  { label: (d) => `${d}d`,   classes: 'bg-yellow-900/40 text-yellow-400 border-yellow-800' },
-  ok:       { label: ()  => 'Vigente', classes: 'bg-emerald-900/40 text-emerald-400 border-emerald-800' },
+  expired:  { label: ()  => 'Vencido',   classes: 'bg-red-900/40 text-red-400 border-red-800' },
+  critical: { label: (d) => `${d}d`,     classes: 'bg-orange-900/40 text-orange-400 border-orange-800' },
+  warning:  { label: (d) => `${d}d`,     classes: 'bg-yellow-900/40 text-yellow-400 border-yellow-800' },
+  ok:       { label: ()  => 'Vigente',   classes: 'bg-emerald-900/40 text-emerald-400 border-emerald-800' },
+  unknown:  { label: ()  => 'Sin fecha', classes: 'bg-amber-900/40 text-amber-400 border-amber-700' },
 };
 
 const STORE_ACCENT: Record<AlertStatus, string> = {
@@ -1105,6 +1106,7 @@ const STORE_ACCENT: Record<AlertStatus, string> = {
   critical: 'border-l-2 border-l-orange-500',
   warning:  'border-l-2 border-l-yellow-400',
   ok:       'border-l-2 border-l-emerald-500',
+  unknown:  'border-l-2 border-l-amber-600',
 };
 
 const DOC_TYPE_LABELS: Record<string, string> = {
@@ -1123,6 +1125,7 @@ const STATUS_LABELS: Record<AlertStatus | 'all', string> = {
   critical: 'Críticos (≤15d)',
   warning:  'En alerta (≤30d)',
   ok:       'Vigentes',
+  unknown:  'Sin fecha',
 };
 
 function AlertBadge({ status, days }: { status: AlertStatus; days: number }) {
@@ -1237,7 +1240,7 @@ function TabCumplimiento() {
   const { loading, error, searchQuery, setSearchQuery, statusFilter, setStatusFilter, filteredStores, stores, refresh } = useComplianceData();
   const counts = stores.reduce(
     (acc, s) => { s.documents.forEach(d => { acc[d.alertStatus]++; }); return acc; },
-    { expired: 0, critical: 0, warning: 0, ok: 0 } as Record<AlertStatus, number>
+    { expired: 0, critical: 0, warning: 0, ok: 0, unknown: 0 } as Record<AlertStatus, number>
   );
   return (
     <div className="space-y-5">

@@ -3,6 +3,7 @@ export type AlertStatus = 'ok' | 'warning' | 'critical' | 'expired' | 'unknown';
 export type DocumentType =
   | 'publicidad'
   | 'permiso_sanitario'
+  | 'conformidad_sanitaria'
   | 'conformidad_uso'
   | 'registro_contribuyente'
   | 'inces'
