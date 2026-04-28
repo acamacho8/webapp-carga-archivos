@@ -10,12 +10,18 @@ import type {
 
 const STATUS_PRIORITY: AlertStatus[] = ['expired', 'critical', 'warning', 'ok', 'unknown'];
 
-// Documentos con vigencia de 1 año — si no tienen expires_at, se calcula desde issued_at
-const ONE_YEAR_DOC_TYPES = new Set(['cert_medico', 'manipulacion_alimentos']);
+// Cert. médico: vence al año de la fecha de emisión
 function isOneYearDoc(type?: string, name?: string): boolean {
-  if (type && ONE_YEAR_DOC_TYPES.has(type)) return true;
+  if (type === 'cert_medico') return true;
   const n = (name ?? '').toLowerCase();
-  return (n.includes('medic') || n.includes('manipul'));
+  return n.includes('medic') && !n.includes('manipul');
+}
+
+// Manipulación de alimentos (SACS, Providencia 070-2015): no tiene fecha de vencimiento
+function isNoExpiryDoc(type?: string, name?: string): boolean {
+  if (type === 'manipulacion_alimentos') return true;
+  const n = (name ?? '').toLowerCase();
+  return n.includes('manipul');
 }
 
 function addOneYear(dateStr: string): string {
@@ -51,7 +57,12 @@ function enrichStores(raw: ComplianceStore[]): StoreWithStatus[] {
     const documents: DocumentWithStatus[] = store.documents.map(doc => {
       const missingExpiry = !doc.expires_at || doc.expires_at === '1970-01-01';
 
-      // Para cert médico y manipulación de alimentos: calcular vencimiento desde emisión + 1 año
+      // Manipulación de alimentos (SACS): no vence según Providencia 070-2015
+      if (isNoExpiryDoc(doc.type, doc.name)) {
+        return { ...doc, expires_at: '9999-12-31', alertStatus: 'ok' as AlertStatus, daysUntilExpiry: 99999 };
+      }
+
+      // Cert. médico: calcular vencimiento desde fecha de emisión + 1 año
       let effectiveExpiry = doc.expires_at;
       if (missingExpiry && doc.issued_at && doc.issued_at !== '1970-01-01' && isOneYearDoc(doc.type, doc.name)) {
         effectiveExpiry = addOneYear(doc.issued_at);
