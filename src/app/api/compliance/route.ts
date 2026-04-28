@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { ComplianceStore, DocumentType } from '@/types/compliance';
 
 export const maxDuration = 60;
+// Note: PDF processing is handled entirely by GAS background job (cumplimiento-fq-gas)
 
 const GAS_URL = process.env.COMPLIANCE_GAS_URL!;
 
@@ -13,8 +14,9 @@ interface CachedDoc {
   docType: string;
   docName: string;
   expiresAt: string;
+  issuedAt?: string; // fecha de emisión (opcional — usada para cert médico y manipulación de alimentos)
   fileUrl: string;
-  folder?: string; // nombre de la sub-carpeta de Drive (vacío = raíz de tienda)
+  folder?: string;
 }
 
 // ─── Caché en memoria (L1) — válida dentro de una instancia ───
@@ -51,6 +53,7 @@ async function fetchFromGasCache(): Promise<ComplianceStore[]> {
       type: doc.docType as DocumentType,
       name: doc.docName,
       expires_at: doc.expiresAt,
+      issued_at: doc.issuedAt,
       file_url: doc.fileUrl,
       folder: doc.folder ?? '',
     });

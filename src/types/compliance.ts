@@ -1,4 +1,4 @@
-export type AlertStatus = 'ok' | 'warning' | 'critical' | 'expired';
+export type AlertStatus = 'ok' | 'warning' | 'critical' | 'expired' | 'unknown';
 
 export type DocumentType =
   | 'publicidad'
@@ -7,15 +7,18 @@ export type DocumentType =
   | 'registro_contribuyente'
   | 'inces'
   | 'impuesto'
-  | 'patente';
+  | 'patente'
+  | 'cert_medico'
+  | 'manipulacion_alimentos';
 
 export interface ComplianceDocument {
   id?: string;
   name: string;
   expires_at: string;
+  issued_at?: string; // fecha de emisión — usada para calcular vencimiento si expires_at es desconocido
   type?: DocumentType;
   file_url?: string;
-  folder?: string; // nombre de la sub-carpeta de Drive ('' = raíz de tienda)
+  folder?: string;
 }
 
 export interface ComplianceStore {

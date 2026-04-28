@@ -8,9 +8,24 @@ import type {
   StoreWithStatus,
 } from '@/types/compliance';
 
-const STATUS_PRIORITY: AlertStatus[] = ['expired', 'critical', 'warning', 'ok'];
+const STATUS_PRIORITY: AlertStatus[] = ['expired', 'critical', 'warning', 'ok', 'unknown'];
+
+// Documentos con vigencia de 1 año — si no tienen expires_at, se calcula desde issued_at
+const ONE_YEAR_DOC_TYPES = new Set(['cert_medico', 'manipulacion_alimentos']);
+function isOneYearDoc(type?: string, name?: string): boolean {
+  if (type && ONE_YEAR_DOC_TYPES.has(type)) return true;
+  const n = (name ?? '').toLowerCase();
+  return (n.includes('medic') || n.includes('manipul'));
+}
+
+function addOneYear(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const expiry = new Date(y + 1, m - 1, d);
+  return `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, '0')}-${String(expiry.getDate()).padStart(2, '0')}`;
+}
 
 function getAlertStatus(expiresAt: string, today: Date): AlertStatus {
+  if (!expiresAt || expiresAt === '1970-01-01') return 'unknown';
   const [y, m, d] = expiresAt.split('-').map(Number);
   const expiry = new Date(y, m - 1, d); // local midnight — avoids UTC drift
   const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -34,13 +49,24 @@ function enrichStores(raw: ComplianceStore[]): StoreWithStatus[] {
   const today = new Date();
   return raw.map(store => {
     const documents: DocumentWithStatus[] = store.documents.map(doc => {
-      const [yr, mo, dy] = doc.expires_at.split('-').map(Number);
+      const missingExpiry = !doc.expires_at || doc.expires_at === '1970-01-01';
+
+      // Para cert médico y manipulación de alimentos: calcular vencimiento desde emisión + 1 año
+      let effectiveExpiry = doc.expires_at;
+      if (missingExpiry && doc.issued_at && doc.issued_at !== '1970-01-01' && isOneYearDoc(doc.type, doc.name)) {
+        effectiveExpiry = addOneYear(doc.issued_at);
+      }
+
+      if (!effectiveExpiry || effectiveExpiry === '1970-01-01') {
+        return { ...doc, alertStatus: 'unknown' as AlertStatus, daysUntilExpiry: 9999 };
+      }
+      const [yr, mo, dy] = effectiveExpiry.split('-').map(Number);
       const expiry = new Date(yr, mo - 1, dy);
       const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const daysUntilExpiry = Math.floor(
         (expiry.getTime() - todayMid.getTime()) / 86_400_000
       );
-      return { ...doc, alertStatus: getAlertStatus(doc.expires_at, today), daysUntilExpiry };
+      return { ...doc, expires_at: effectiveExpiry, alertStatus: getAlertStatus(effectiveExpiry, today), daysUntilExpiry };
     });
     return {
       ...store,
